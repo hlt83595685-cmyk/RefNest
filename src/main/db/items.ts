@@ -10,6 +10,15 @@ export interface Item {
   year: number | null
   doi: string | null
   url: string | null
+  journal: string | null
+  publisher: string | null
+  volume: string | null
+  issue: string | null
+  pages: string | null
+  isbn: string | null
+  language: string | null
+  extra: string | null
+  deleted: number   // 0 = active, 1 = trash
   library_id: number
   created_at: number
   updated_at: number
@@ -18,7 +27,13 @@ export interface Item {
 
 export function getAllItems(libraryId = 1): Item[] {
   return getDb()
-    .prepare('SELECT * FROM items WHERE library_id = ? ORDER BY updated_at DESC')
+    .prepare('SELECT * FROM items WHERE library_id = ? AND deleted = 0 ORDER BY updated_at DESC')
+    .all(libraryId) as Item[]
+}
+
+export function getTrashedItems(libraryId = 1): Item[] {
+  return getDb()
+    .prepare('SELECT * FROM items WHERE library_id = ? AND deleted = 1 ORDER BY updated_at DESC')
     .all(libraryId) as Item[]
 }
 
@@ -31,8 +46,15 @@ export function createItem(data: Partial<Item>): Item {
   const key = randomUUID()
   const now = Math.floor(Date.now() / 1000)
   db.prepare(`
-    INSERT INTO items (key, type, title, abstract, year, doi, url, library_id, created_at, updated_at)
-    VALUES (@key, @type, @title, @abstract, @year, @doi, @url, @library_id, @created_at, @updated_at)
+    INSERT INTO items (
+      key, type, title, abstract, year, doi, url,
+      journal, publisher, volume, issue, pages, isbn, language, extra,
+      library_id, created_at, updated_at, deleted
+    ) VALUES (
+      @key, @type, @title, @abstract, @year, @doi, @url,
+      @journal, @publisher, @volume, @issue, @pages, @isbn, @language, @extra,
+      @library_id, @created_at, @updated_at, 0
+    )
   `).run({
     key,
     type: data.type ?? 'journalArticle',
@@ -41,6 +63,14 @@ export function createItem(data: Partial<Item>): Item {
     year: data.year ?? null,
     doi: data.doi ?? null,
     url: data.url ?? null,
+    journal: data.journal ?? null,
+    publisher: data.publisher ?? null,
+    volume: data.volume ?? null,
+    issue: data.issue ?? null,
+    pages: data.pages ?? null,
+    isbn: data.isbn ?? null,
+    language: data.language ?? null,
+    extra: data.extra ?? null,
     library_id: data.library_id ?? 1,
     created_at: now,
     updated_at: now,
@@ -50,20 +80,28 @@ export function createItem(data: Partial<Item>): Item {
 
 export function updateItem(id: number, data: Partial<Item>): void {
   const now = Math.floor(Date.now() / 1000)
+  const fields = [
+    'title','abstract','year','doi','url',
+    'journal','publisher','volume','issue','pages','isbn','language','extra'
+  ]
+  const setClauses = fields.map((f) => `${f} = COALESCE(@${f}, ${f})`).join(', ')
   getDb().prepare(`
-    UPDATE items
-    SET title = COALESCE(@title, title),
-        abstract = COALESCE(@abstract, abstract),
-        year = COALESCE(@year, year),
-        doi = COALESCE(@doi, doi),
-        url = COALESCE(@url, url),
-        updated_at = @updated_at,
-        version = version + 1
+    UPDATE items SET ${setClauses}, updated_at = @updated_at, version = version + 1
     WHERE id = @id
   `).run({ ...data, id, updated_at: now })
 }
 
-export function deleteItem(id: number): void {
+export function trashItem(id: number): void {
+  const now = Math.floor(Date.now() / 1000)
+  getDb().prepare('UPDATE items SET deleted = 1, updated_at = ? WHERE id = ?').run(now, id)
+}
+
+export function restoreItem(id: number): void {
+  const now = Math.floor(Date.now() / 1000)
+  getDb().prepare('UPDATE items SET deleted = 0, updated_at = ? WHERE id = ?').run(now, id)
+}
+
+export function permanentlyDeleteItem(id: number): void {
   getDb().prepare('DELETE FROM items WHERE id = ?').run(id)
 }
 
@@ -71,7 +109,7 @@ export function searchItems(query: string): Item[] {
   return getDb().prepare(`
     SELECT i.* FROM items i
     JOIN items_fts ON items_fts.rowid = i.id
-    WHERE items_fts MATCH ?
+    WHERE items_fts MATCH ? AND i.deleted = 0
     ORDER BY rank
   `).all(query) as Item[]
 }
