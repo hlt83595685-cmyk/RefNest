@@ -19,8 +19,12 @@ export const useItemStore = create<ItemStore>((set) => ({
   searchQuery: '',
 
   loadItems: async () => {
-    const items = await window.refnest.items.getAll()
-    set({ items })
+    try {
+      const items = await window.refnest.items.getAll()
+      set({ items: items ?? [] })
+    } catch (err) {
+      console.error('[itemStore] loadItems failed:', err)
+    }
   },
 
   setSelectedId: (id) => set({ selectedId: id }),

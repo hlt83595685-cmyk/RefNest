@@ -20,8 +20,12 @@ export function Toolbar(): JSX.Element {
   }
 
   const handleAdd = async (): Promise<void> => {
-    await window.refnest.items.create({ type: 'journalArticle', title: '' })
-    await loadItems()
+    try {
+      await window.refnest.items.create({ type: 'journalArticle', title: '新条目' })
+      await loadItems()
+    } catch (err) {
+      console.error('[Toolbar] handleAdd failed:', err)
+    }
   }
 
   // Global keyboard shortcuts

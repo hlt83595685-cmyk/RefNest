@@ -150,4 +150,26 @@ function runMigrations(db: Database.Database): void {
       INSERT INTO schema_version VALUES (1);
     `)
   }
+
+  if (current < 2) {
+    // Add Phase 1 columns to items (ALTER TABLE is safe for nullable columns)
+    const existingCols = (db.pragma('table_info(items)') as { name: string }[]).map((c) => c.name)
+    const newCols: [string, string][] = [
+      ['journal',   'TEXT'],
+      ['publisher', 'TEXT'],
+      ['volume',    'TEXT'],
+      ['issue',     'TEXT'],
+      ['pages',     'TEXT'],
+      ['isbn',      'TEXT'],
+      ['language',  'TEXT'],
+      ['extra',     'TEXT'],
+      ['deleted',   'INTEGER NOT NULL DEFAULT 0'],
+    ]
+    for (const [col, def] of newCols) {
+      if (!existingCols.includes(col)) {
+        db.exec(`ALTER TABLE items ADD COLUMN ${col} ${def}`)
+      }
+    }
+    db.exec(`INSERT INTO schema_version VALUES (2)`)
+  }
 }

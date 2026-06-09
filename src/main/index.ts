@@ -25,6 +25,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow!.show()
+    if (is.dev) mainWindow!.webContents.openDevTools()
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -47,9 +48,20 @@ app.whenReady().then(async () => {
   })
 
   // Init core services
-  await initDatabase()
-  startLocalServer()
+  try {
+    await initDatabase()
+    console.log('[main] Database initialized')
+  } catch (err) {
+    console.error('[main] Database init failed:', err)
+  }
+  try {
+    startLocalServer()
+    console.log('[main] Local server started on port 23120')
+  } catch (err) {
+    console.error('[main] Local server failed:', err)
+  }
   registerIpcHandlers(ipcMain)
+  console.log('[main] IPC handlers registered')
 
   createWindow()
 
