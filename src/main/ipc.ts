@@ -10,6 +10,7 @@ import {
   addItemToCollection, removeItemFromCollection, getItemsByCollection
 } from './db/collections'
 import { importBibTeX, importCSLJSON } from './importer'
+import { importPDF } from './pdfImporter'
 
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   // Items
@@ -59,9 +60,10 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     const result = await dialog.showOpenDialog({
       title: 'Import References',
       filters: [
+        { name: 'PDF', extensions: ['pdf'] },
         { name: 'BibTeX', extensions: ['bib'] },
         { name: 'CSL-JSON', extensions: ['json'] },
-        { name: 'All Supported', extensions: ['bib', 'json'] },
+        { name: 'All Supported', extensions: ['pdf', 'bib', 'json'] },
       ],
       properties: ['openFile', 'multiSelections'],
     })
@@ -69,8 +71,10 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
 
     let imported = 0
     for (const filePath of result.filePaths) {
-      if (filePath.endsWith('.bib')) imported += importBibTeX(filePath)
-      else if (filePath.endsWith('.json')) imported += importCSLJSON(filePath)
+      const lower = filePath.toLowerCase()
+      if (lower.endsWith('.pdf')) imported += await importPDF(filePath)
+      else if (lower.endsWith('.bib')) imported += importBibTeX(filePath)
+      else if (lower.endsWith('.json')) imported += importCSLJSON(filePath)
     }
     return { canceled: false, imported }
   })
