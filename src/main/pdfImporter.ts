@@ -149,18 +149,22 @@ export async function importPDF(filePath: string): Promise<number> {
       language: work.language ?? null,
     })
 
-    const authors = (work.author ?? []).map((a, i) => ({
-      last_name: a.family ?? 'Unknown',
-      first_name: a.given ?? null,
-      role: 'author' as const,
-      position: i,
-    }))
-    const editors = (work.editor ?? []).map((e, i) => ({
-      last_name: e.family ?? 'Unknown',
-      first_name: e.given ?? null,
-      role: 'editor' as const,
-      position: authors.length + i,
-    }))
+    const authors = (work.author ?? [])
+      .filter((a) => a.family)
+      .map((a, i) => ({
+        last_name: a.family!,
+        first_name: a.given ?? null,
+        role: 'author' as const,
+        position: i,
+      }))
+    const editors = (work.editor ?? [])
+      .filter((e) => e.family)
+      .map((e, i) => ({
+        last_name: e.family!,
+        first_name: e.given ?? null,
+        role: 'editor' as const,
+        position: authors.length + i,
+      }))
     const creators = [...authors, ...editors]
     if (creators.length) setCreatorsForItem(item.id, creators)
     console.log(`[pdfImporter] Imported via CrossRef: "${item.title}"`)

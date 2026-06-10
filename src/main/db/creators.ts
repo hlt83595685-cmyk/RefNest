@@ -32,7 +32,7 @@ export function setCreatorsForItem(
     INSERT OR IGNORE INTO creators (first_name, last_name) VALUES (@first_name, @last_name)
   `)
   const getId = db.prepare(
-    'SELECT id FROM creators WHERE last_name = ? AND COALESCE(first_name,"") = COALESCE(?,"")'
+    "SELECT id FROM creators WHERE last_name = ? AND COALESCE(first_name,'') = COALESCE(?,'') "
   )
   const link = db.prepare(`
     INSERT OR REPLACE INTO item_creators (item_id, creator_id, role, position)
