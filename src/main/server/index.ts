@@ -43,6 +43,14 @@ export function startLocalServer(): void {
     res.end()
   })
 
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[RefNest] Port ${PORT} already in use — local connector disabled`)
+    } else {
+      console.error('[RefNest] Server error:', err)
+    }
+  })
+
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`[RefNest] Local connector listening on http://127.0.0.1:${PORT}`)
   })

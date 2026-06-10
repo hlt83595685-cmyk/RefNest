@@ -3,37 +3,25 @@ import { basename } from 'path'
 import { createItem } from './db/items'
 import { setCreatorsForItem } from './db/creators'
 
-// ── PDF text extraction via pdfjs-dist ──────────────────────────────────────
-
+// ── PDF text extraction via pdf-parse ───────────────────────────────────────
 
 async function extractPdfText(filePath: string): Promise<string> {
-  // pdfjs-dist requires a workerSrc; in Node (main process) use legacy build
+  // pdf-parse is a CJS-only Node library, safe to require() in Electron main
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js') as typeof import('pdfjs-dist')
-  pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+  const pdfParse = require('pdf-parse') as (
+    buf: Buffer,
+    opts?: { max?: number }
+  ) => Promise<{ text: string }>
 
-  const data = new Uint8Array(readFileSync(filePath))
-  const doc = await pdfjsLib.getDocument({ data }).promise
-  const pages: string[] = []
-  // Extract first 8 pages -- enough for title/abstract/DOI, avoid massive PDFs
-  const limit = Math.min(doc.numPages, 8)
-  for (let i = 1; i <= limit; i++) {
-    const page = await doc.getPage(i)
-    const content = await page.getTextContent()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const text = content.items
-      .filter((item) => 'str' in item)
-      .map((item) => (item as { str: string }).str)
-      .join(' ')
-    pages.push(text)
-  }
-  return pages.join('\n')
+  const buf = readFileSync(filePath)
+  // max: 8 — parse only first 8 pages to keep things fast
+  const result = await pdfParse(buf, { max: 8 })
+  return result.text
 }
 
 // ── DOI extraction ──────────────────────────────────────────────────────────
 
 function extractDoi(text: string): string | null {
-  // Matches: 10.XXXX/anything
   const m = text.match(/\b(10\.\d{4,9}\/[^\s"'<>[\]{}|\\^`]+)/i)
   return m ? m[1].replace(/[.)]+$/, '') : null
 }
@@ -43,7 +31,6 @@ function extractDoi(text: string): string | null {
 interface CrossRefAuthor {
   family?: string
   given?: string
-  sequence?: string
 }
 
 interface CrossRefWork {
@@ -80,7 +67,6 @@ const CROSSREF_TYPE_MAP: Record<string, string> = {
 async function fetchCrossRef(doi: string): Promise<CrossRefWork | null> {
   try {
     const url = `https://api.crossref.org/works/${encodeURIComponent(doi)}`
-    // Use built-in fetch (Node 18+ / Electron 20+)
     const res = await fetch(url, {
       signal: AbortSignal.timeout(8000),
       headers: { 'User-Agent': 'RefNest/0.1 (mailto:user@refnest.app)' },
@@ -93,7 +79,7 @@ async function fetchCrossRef(doi: string): Promise<CrossRefWork | null> {
   }
 }
 
-// ── Local heuristic parser (fallback) ───────────────────────────────────────
+// ── Local heuristic fallback ─────────────────────────────────────────────────
 
 interface LocalMeta {
   title: string | null
@@ -102,25 +88,22 @@ interface LocalMeta {
 }
 
 function parseLocalMeta(text: string, filename: string): LocalMeta {
-  // Title: first non-empty line, capped at 200 chars
   const lines = text
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.length > 5)
   const title = (lines[0] ?? basename(filename, '.pdf')).slice(0, 200)
 
-  // Abstract: text after "abstract" keyword up to 1200 chars
   const absMatch = text.match(/abstract[:\s]+(.{50,1200}?)(?:\n\n|\bintroduction\b)/is)
   const abstract = absMatch ? absMatch[1].replace(/\s+/g, ' ').trim() : null
 
-  // Year: 4-digit year between 1900-2099
   const yearMatch = text.match(/\b(19|20)\d{2}\b/)
   const year = yearMatch ? parseInt(yearMatch[0], 10) : null
 
   return { title, abstract, year }
 }
 
-// ── Main export ─────────────────────────────────────────────────────────────
+// ── Main export ──────────────────────────────────────────────────────────────
 
 export async function importPDF(filePath: string): Promise<number> {
   let text: string
@@ -128,19 +111,21 @@ export async function importPDF(filePath: string): Promise<number> {
     text = await extractPdfText(filePath)
   } catch (err) {
     console.error('[pdfImporter] text extraction failed:', err)
-    // Create a stub item with just the filename
     createItem({ type: 'journalArticle', title: basename(filePath, '.pdf') })
     return 1
   }
 
   const doi = extractDoi(text)
+  console.log(`[pdfImporter] DOI found: ${doi ?? 'none'}`)
+
   let work: CrossRefWork | null = null
   if (doi) {
+    console.log('[pdfImporter] Querying CrossRef...')
     work = await fetchCrossRef(doi)
+    console.log(`[pdfImporter] CrossRef result: ${work ? 'OK' : 'not found / offline'}`)
   }
 
   if (work) {
-    // Build item from CrossRef data
     const dateObj =
       work.published?.['date-parts'] ??
       work['published-print']?.['date-parts'] ??
@@ -178,16 +163,17 @@ export async function importPDF(filePath: string): Promise<number> {
     }))
     const creators = [...authors, ...editors]
     if (creators.length) setCreatorsForItem(item.id, creators)
+    console.log(`[pdfImporter] Imported via CrossRef: "${item.title}"`)
   } else {
-    // Fallback: local heuristic
     const meta = parseLocalMeta(text, filePath)
-    createItem({
+    const item = createItem({
       type: 'journalArticle',
       title: meta.title,
       abstract: meta.abstract,
       year: meta.year,
       doi: doi ?? null,
     })
+    console.log(`[pdfImporter] Imported via local heuristic: "${item.title}"`)
   }
 
   return 1
