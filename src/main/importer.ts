@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { createItem } from './db/items'
 import { setCreatorsForItem } from './db/creators'
+import { addItemToCollection } from './db/collections'
 
 // ── BibTeX parser (no external dependency) ──────────────────────────────────
 
@@ -46,7 +47,7 @@ const BIB_TYPE_MAP: Record<string, string> = {
   incollection: 'bookSection',
 }
 
-export function importBibTeX(filePath: string): number {
+export function importBibTeX(filePath: string, collectionId?: number): number {
   const src = readFileSync(filePath, 'utf-8')
   const entries = parseBibTeX(src)
   let count = 0
@@ -68,6 +69,7 @@ export function importBibTeX(filePath: string): number {
       pages: f.pages,
       isbn: f.isbn,
     })
+    if (collectionId) addItemToCollection(collectionId, item.id)
     // Parse authors: "Last, First and Last2, First2"
     const authorStr = f.author ?? f.editor ?? ''
     if (authorStr) {
@@ -118,7 +120,7 @@ const CSL_TYPE_MAP: Record<string, string> = {
   manuscript: 'preprint',
 }
 
-export function importCSLJSON(filePath: string): number {
+export function importCSLJSON(filePath: string, collectionId?: number): number {
   const raw = readFileSync(filePath, 'utf-8')
   let data: CSLItem | CSLItem[]
   try {
@@ -146,6 +148,7 @@ export function importCSLJSON(filePath: string): number {
       isbn: csl.ISBN,
       language: csl.language,
     })
+    if (collectionId) addItemToCollection(collectionId, item.id)
     const authors = csl.author ?? []
     const editors = csl.editor ?? []
     const creators = [

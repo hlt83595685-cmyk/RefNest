@@ -3,6 +3,7 @@ import { basename } from 'path'
 import { createItem } from './db/items'
 import { setCreatorsForItem } from './db/creators'
 import { addAttachment } from './db/attachments'
+import { addItemToCollection } from './db/collections'
 import { fetchCrossRefByDoi, CROSSREF_TYPE_MAP, type CrossRefWork } from './crossref'
 
 // ── PDF text extraction via pdf-parse ───────────────────────────────────────
@@ -53,13 +54,14 @@ function parseLocalMeta(text: string, filename: string): LocalMeta {
 
 // ── Main export ──────────────────────────────────────────────────────────────
 
-export async function importPDF(filePath: string): Promise<number> {
+export async function importPDF(filePath: string, collectionId?: number): Promise<number> {
   let text: string
   try {
     text = await extractPdfText(filePath)
   } catch (err) {
     console.error('[pdfImporter] text extraction failed:', err)
     const stub = createItem({ type: 'journalArticle', title: basename(filePath, '.pdf') })
+    if (collectionId) addItemToCollection(collectionId, stub.id)
     try { addAttachment(stub.id, filePath) } catch { /* ignore */ }
     return 1
   }
@@ -97,6 +99,7 @@ export async function importPDF(filePath: string): Promise<number> {
       isbn: work.ISBN?.[0] ?? null,
       language: work.language ?? null,
     })
+    if (collectionId) addItemToCollection(collectionId, item.id)
 
     const authors = (work.author ?? [])
       .filter((a) => a.family)
@@ -127,6 +130,7 @@ export async function importPDF(filePath: string): Promise<number> {
       year: meta.year,
       doi: doi ?? null,
     })
+    if (collectionId) addItemToCollection(collectionId, item.id)
     addAttachment(item.id, filePath)
     console.log(`[pdfImporter] Imported via local heuristic: "${item.title}"`)
   }

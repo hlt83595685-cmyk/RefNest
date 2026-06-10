@@ -33,6 +33,8 @@ const zh = {
     removeFromCollection: '从此分类移除',
     emptyTrash: '清空废纸篓',
     trashEmpty: '废纸篓为空',
+    addToCollection: '添加到分类',
+    moveToCollection: '移动到分类',
   },
   detail: {
     title: '标题',
@@ -112,6 +114,8 @@ const en = {
     removeFromCollection: 'Remove from Collection',
     emptyTrash: 'Empty Trash',
     trashEmpty: 'Trash is empty',
+    addToCollection: 'Add to Collection',
+    moveToCollection: 'Move to Collection',
   },
   detail: {
     title: 'Title',

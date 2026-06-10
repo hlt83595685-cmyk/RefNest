@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useItemStore } from '../../stores/itemStore'
+import { useCollectionStore } from '../../stores/collectionStore'
 import type { Item } from '../../../../shared/types'
 
-interface ContextMenu { x: number; y: number; itemId: number | null }
+interface ContextMenu { x: number; y: number; itemId: number | null; showMove?: boolean }
 
 const TYPE_ICON: Record<string, string> = {
   journalArticle:  '📄',
@@ -75,6 +76,7 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
 export function ItemListPane(): JSX.Element {
   const { t } = useTranslation('common')
   const { items, selectedId, setSelectedId, searchQuery, activeCollection, loadItems } = useItemStore()
+  const { collections } = useCollectionStore()
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const isTrash = activeCollection === 'trash'
@@ -148,6 +150,21 @@ export function ItemListPane(): JSX.Element {
     await window.refnest.items.emptyTrash()
     setSelectedId(null)
     await loadItems()
+    setContextMenu(null)
+  }
+
+  const handleMoveToCollection = async (itemId: number, colId: number): Promise<void> => {
+    // Remove from current collection (if in one), add to target
+    if (activeColId !== null) {
+      await window.refnest.collections.removeItem(activeColId, itemId)
+    }
+    await window.refnest.collections.addItem(colId, itemId)
+    await loadItems()
+    setContextMenu(null)
+  }
+
+  const handleAddToCollection = async (itemId: number, colId: number): Promise<void> => {
+    await window.refnest.collections.addItem(colId, itemId)
     setContextMenu(null)
   }
 
@@ -231,14 +248,32 @@ export function ItemListPane(): JSX.Element {
             </>
           ) : isCollection ? (
             <>
+              {contextMenu.itemId !== null && collections.filter(c => c.id !== activeColId).length > 0 && (
+                <CollectionSubMenu
+                  label={t('item.moveToCollection')}
+                  collections={collections.filter(c => c.id !== activeColId)}
+                  onSelect={(colId) => handleMoveToCollection(contextMenu.itemId!, colId)}
+                />
+              )}
               <ContextItem label={t('item.removeFromCollection')} icon="↩" color="var(--primary)"
                 onClick={() => handleRemoveFromCollection(contextMenu.itemId)} />
+              <div style={{ height: 1, background: 'var(--separator)', margin: '4px 8px' }} />
               <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"
                 onClick={() => handleTrash(contextMenu.itemId)} />
             </>
           ) : (
-            <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"
-              onClick={() => handleTrash(contextMenu.itemId)} />
+            <>
+              {collections.length > 0 && contextMenu.itemId !== null && (
+                <CollectionSubMenu
+                  label={t('item.addToCollection')}
+                  collections={collections}
+                  onSelect={(colId) => handleAddToCollection(contextMenu.itemId!, colId)}
+                />
+              )}
+              {collections.length > 0 && <div style={{ height: 1, background: 'var(--separator)', margin: '4px 8px' }} />}
+              <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"
+                onClick={() => handleTrash(contextMenu.itemId)} />
+            </>
           )}
         </div>
       )}
@@ -263,5 +298,74 @@ function ContextItem({ label, icon, color, onClick }: {
       <span>{icon}</span>
       {label}
     </button>
+  )
+}
+
+function CollectionSubMenu({ label, collections, onSelect }: {
+  label: string
+  collections: { id: number; name: string }[]
+  onSelect: (colId: number) => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div style={{ position: 'relative', isolation: 'isolate' }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          width: '100%', padding: '7px 12px',
+          borderRadius: 'var(--radius-md)', border: 'none',
+          background: open ? 'var(--primary-light)' : 'transparent',
+          color: 'var(--foreground)',
+          fontSize: 13, fontWeight: 500, textAlign: 'left',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>📁</span>{label}
+        </span>
+        <span style={{ color: 'var(--muted)', fontSize: 10 }}>▶</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: '100%',
+          marginLeft: 4,
+          zIndex: 200,
+          background: 'rgba(255,255,255,0.95)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--shadow-lg)',
+          padding: 4,
+          minWidth: 160,
+          maxHeight: 240,
+          overflowY: 'auto',
+        }}>
+          {collections.map((col) => (
+            <button
+              key={col.id}
+              onClick={() => onSelect(col.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '7px 12px',
+                borderRadius: 'var(--radius-md)', border: 'none',
+                background: 'transparent', color: 'var(--foreground)',
+                fontSize: 13, fontWeight: 500, textAlign: 'left',
+              }}
+            >
+              <span>📁</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {col.name}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

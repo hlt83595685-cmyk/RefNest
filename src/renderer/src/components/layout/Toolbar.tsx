@@ -4,15 +4,19 @@ import { useItemStore } from '../../stores/itemStore'
 
 export function Toolbar(): JSX.Element {
   const { t, i18n } = useTranslation('common')
-  const { searchQuery, setSearchQuery, loadItems } = useItemStore()
+  const { searchQuery, setSearchQuery, loadItems, activeCollection } = useItemStore()
   const searchRef = useRef<HTMLInputElement>(null)
+
+  const activeColId = activeCollection.startsWith('col:')
+    ? parseInt(activeCollection.slice(4), 10)
+    : undefined
 
   const toggleLang = (): void => {
     i18n.changeLanguage(i18n.language === 'zh' ? 'en' : 'zh')
   }
 
   const handleImport = async (): Promise<void> => {
-    const result = await window.refnest.import.openDialog()
+    const result = await window.refnest.import.openDialog(activeColId)
     if (!result.canceled && result.imported > 0) {
       await loadItems()
     }
@@ -20,7 +24,10 @@ export function Toolbar(): JSX.Element {
 
   const handleAdd = async (): Promise<void> => {
     try {
-      await window.refnest.items.create({ type: 'journalArticle', title: '新条目' })
+      const item = await window.refnest.items.create({ type: 'journalArticle', title: '新条目' })
+      if (activeColId && item?.id) {
+        await window.refnest.collections.addItem(activeColId, item.id)
+      }
       await loadItems()
     } catch (err) {
       console.error('[Toolbar] handleAdd failed:', err)

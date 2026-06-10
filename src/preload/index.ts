@@ -46,7 +46,7 @@ const refnestAPI = {
     openPath: (filePath: string) => ipcRenderer.invoke('attachments:openPath', filePath),
   },
   import: {
-    openDialog: () => ipcRenderer.invoke('import:openDialog'),
+    openDialog: (collectionId?: number) => ipcRenderer.invoke('import:openDialog', collectionId),
   },
 }
 

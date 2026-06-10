@@ -84,7 +84,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   })
 
   // Import
-  ipcMain.handle('import:openDialog', async () => {
+  ipcMain.handle('import:openDialog', async (_e, collectionId?: number) => {
     const result = await dialog.showOpenDialog({
       title: 'Import References',
       filters: [
@@ -100,9 +100,9 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     let imported = 0
     for (const filePath of result.filePaths) {
       const lower = filePath.toLowerCase()
-      if (lower.endsWith('.pdf')) imported += await importPDF(filePath)
-      else if (lower.endsWith('.bib')) imported += importBibTeX(filePath)
-      else if (lower.endsWith('.json')) imported += importCSLJSON(filePath)
+      if (lower.endsWith('.pdf')) imported += await importPDF(filePath, collectionId)
+      else if (lower.endsWith('.bib')) imported += importBibTeX(filePath, collectionId)
+      else if (lower.endsWith('.json')) imported += importCSLJSON(filePath, collectionId)
     }
     return { canceled: false, imported }
   })
