@@ -3,6 +3,7 @@ import { basename } from 'path'
 import { createItem } from './db/items'
 import { setCreatorsForItem } from './db/creators'
 import { addAttachment } from './db/attachments'
+import { fetchCrossRefByDoi, CROSSREF_TYPE_MAP, type CrossRefWork } from './crossref'
 
 // ── PDF text extraction via pdf-parse ───────────────────────────────────────
 
@@ -15,7 +16,6 @@ async function extractPdfText(filePath: string): Promise<string> {
   ) => Promise<{ text: string }>
 
   const buf = readFileSync(filePath)
-  // max: 8 — parse only first 8 pages to keep things fast
   const result = await pdfParse(buf, { max: 8 })
   return result.text
 }
@@ -25,59 +25,6 @@ async function extractPdfText(filePath: string): Promise<string> {
 function extractDoi(text: string): string | null {
   const m = text.match(/\b(10\.\d{4,9}\/[^\s"'<>[\]{}|\\^`]+)/i)
   return m ? m[1].replace(/[.)]+$/, '') : null
-}
-
-// ── CrossRef lookup ─────────────────────────────────────────────────────────
-
-interface CrossRefAuthor {
-  family?: string
-  given?: string
-}
-
-interface CrossRefWork {
-  title?: string[]
-  abstract?: string
-  'container-title'?: string[]
-  publisher?: string
-  volume?: string
-  issue?: string
-  page?: string
-  ISBN?: string[]
-  language?: string
-  type?: string
-  DOI?: string
-  URL?: string
-  author?: CrossRefAuthor[]
-  editor?: CrossRefAuthor[]
-  published?: { 'date-parts'?: number[][] }
-  'published-print'?: { 'date-parts'?: number[][] }
-  'published-online'?: { 'date-parts'?: number[][] }
-}
-
-const CROSSREF_TYPE_MAP: Record<string, string> = {
-  'journal-article': 'journalArticle',
-  'book': 'book',
-  'book-chapter': 'bookSection',
-  'proceedings-article': 'conferencePaper',
-  'dissertation': 'thesis',
-  'report': 'report',
-  'posted-content': 'preprint',
-  'monograph': 'book',
-}
-
-async function fetchCrossRef(doi: string): Promise<CrossRefWork | null> {
-  try {
-    const url = `https://api.crossref.org/works/${encodeURIComponent(doi)}`
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(8000),
-      headers: { 'User-Agent': 'RefNest/0.1 (mailto:user@refnest.app)' },
-    })
-    if (!res.ok) return null
-    const json = (await res.json()) as { message?: CrossRefWork }
-    return json.message ?? null
-  } catch {
-    return null
-  }
 }
 
 // ── Local heuristic fallback ─────────────────────────────────────────────────
@@ -123,7 +70,7 @@ export async function importPDF(filePath: string): Promise<number> {
   let work: CrossRefWork | null = null
   if (doi) {
     console.log('[pdfImporter] Querying CrossRef...')
-    work = await fetchCrossRef(doi)
+    work = await fetchCrossRefByDoi(doi)
     console.log(`[pdfImporter] CrossRef result: ${work ? 'OK' : 'not found / offline'}`)
   }
 
