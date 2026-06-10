@@ -16,10 +16,11 @@ const TYPE_ICON: Record<string, string> = {
   preprint:        '📝',
 }
 
-function ItemRow({ item, selected, onClick, onContextMenu }: {
+function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
   item: Item
   selected: boolean
   onClick: () => void
+  onDoubleClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
 }): JSX.Element {
   const { t } = useTranslation('common')
@@ -28,6 +29,7 @@ function ItemRow({ item, selected, onClick, onContextMenu }: {
   return (
     <div
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       style={{
         display: 'flex',
@@ -96,6 +98,21 @@ export function ItemListPane(): JSX.Element {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  const handleDoubleClick = async (item: Item): Promise<void> => {
+    setSelectedId(item.id)
+    try {
+      const atts = await window.refnest.attachments.getByItem(item.id)
+      const pdf = atts.find(
+        (a) => a.mime_type === 'application/pdf' || a.filename?.toLowerCase().endsWith('.pdf')
+      )
+      if (!pdf) return
+      const path = await window.refnest.attachments.getPath(pdf.id)
+      if (path) useItemStore.getState().openPdf(path, pdf.filename ?? 'document.pdf')
+    } catch (err) {
+      console.error('[ItemListPane] double-click open failed:', err)
+    }
+  }
+
   const handleTrash = async (id: number): Promise<void> => {
     await window.refnest.items.trash(id)
     if (selectedId === id) setSelectedId(null)
@@ -152,6 +169,7 @@ export function ItemListPane(): JSX.Element {
               item={item}
               selected={selectedId === item.id}
               onClick={() => setSelectedId(item.id)}
+              onDoubleClick={() => handleDoubleClick(item)}
               onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, itemId: item.id }) }}
             />
           ))
