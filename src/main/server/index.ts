@@ -10,12 +10,7 @@ let server: http.Server | null = null
 
 function json(res: http.ServerResponse, status: number, data: unknown): void {
   const body = JSON.stringify(data)
-  res.writeHead(status, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': 'http://localhost',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-RefNest-Token',
-  })
+  res.writeHead(status, { 'Content-Type': 'application/json' })
   res.end(body)
 }
 
@@ -29,17 +24,16 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 
 export function startLocalServer(): void {
   server = http.createServer(async (req, res) => {
-    // CORS preflight
+    // CORS — allow browser extensions and any local origin
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
     if (req.method === 'OPTIONS') {
-      res.setHeader('Access-Control-Allow-Origin', '*')
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-RefNest-Token')
       res.writeHead(204)
       res.end()
       return
     }
-
-    res.setHeader('Access-Control-Allow-Origin', '*')
 
     const url = req.url ?? '/'
 
