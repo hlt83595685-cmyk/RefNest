@@ -15,18 +15,95 @@ const CORS_HEADERS = {
 }
 
 function json(res: http.ServerResponse, status: number, data: unknown): void {
-  const body = JSON.stringify(data)
   res.writeHead(status, { ...CORS_HEADERS, 'Content-Type': 'application/json' })
-  res.end(body)
+  res.end(JSON.stringify(data))
 }
 
 function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let body = ''
     req.on('data', (chunk) => (body += chunk))
     req.on('end', () => resolve(body))
+    req.on('error', reject)
   })
 }
+
+// ── CrossRef enrichment (shared by /preview and /save) ─────────────────────
+
+interface EnrichedItem {
+  type: string
+  title: string | null
+  abstract: string | null
+  year: number | null
+  doi: string | null
+  url: string | null
+  journal: string | null
+  publisher: string | null
+  volume: string | null
+  issue: string | null
+  pages: string | null
+  isbn: string | null
+  language: string | null
+  authors: { last_name: string; first_name: string | null }[]
+  pdf_url: string | null
+}
+
+async function enrich(input: Partial<EnrichedItem>): Promise<EnrichedItem> {
+  let { type, title, abstract, year, doi, url, journal, publisher,
+        volume, issue, pages, isbn, language, authors = [], pdf_url } = input
+
+  const apply = (cr: Awaited<ReturnType<typeof fetchCrossRefByDoi>>) => {
+    if (!cr) return
+    const dateParts =
+      cr.published?.['date-parts'] ??
+      cr['published-print']?.['date-parts'] ??
+      cr['published-online']?.['date-parts']
+    if (!doi)   doi   = cr.DOI ?? null
+    if (!type)  type  = CROSSREF_TYPE_MAP[cr.type ?? ''] ?? 'journalArticle'
+    title     = title     || cr.title?.[0]     || null
+    abstract  = abstract  || (cr.abstract?.replace(/<[^>]+>/g, '').trim()) || null
+    year      = year      || (dateParts?.[0]?.[0] ?? null)
+    journal   = journal   || cr['container-title']?.[0] || null
+    publisher = publisher || cr.publisher || null
+    volume    = volume    || cr.volume    || null
+    issue     = issue     || cr.issue     || null
+    pages     = pages     || cr.page      || null
+    language  = language  || cr.language  || null
+    if (!authors?.length && cr.author?.length) {
+      authors = cr.author
+        .filter((a) => a.family)
+        .map((a) => ({ last_name: a.family!, first_name: a.given ?? null }))
+    }
+  }
+
+  try {
+    if (doi) {
+      apply(await fetchCrossRefByDoi(doi))
+    } else if (title) {
+      apply(await searchCrossRefByTitle(title))
+    }
+  } catch { /* non-fatal */ }
+
+  return {
+    type:      type      ?? 'journalArticle',
+    title:     title     ?? null,
+    abstract:  abstract  ?? null,
+    year:      year ? Number(year) : null,
+    doi:       doi       ?? null,
+    url:       url       ?? null,
+    journal:   journal   ?? null,
+    publisher: publisher ?? null,
+    volume:    volume    ?? null,
+    issue:     issue     ?? null,
+    pages:     pages     ?? null,
+    isbn:      isbn      ?? null,
+    language:  language  ?? null,
+    authors:   authors   ?? [],
+    pdf_url:   pdf_url   ?? null,
+  }
+}
+
+// ── Server ──────────────────────────────────────────────────────────────────
 
 export function startLocalServer(): void {
   server = http.createServer(async (req, res) => {
@@ -36,92 +113,54 @@ export function startLocalServer(): void {
       return
     }
 
-    // Strip query string for route matching
     const url = (req.url ?? '/').split('?')[0]
 
     try {
-      // GET /ping — health check
+      // GET /ping
       if (req.method === 'GET' && url === '/ping') {
-        return json(res, 200, { status: 'ok', app: 'RefNest', version: '0.1.0' })
+        return json(res, 200, { ok: true, app: 'RefNest' })
       }
 
-      // GET /collections — list user collections for popup
+      // GET /collections
       if (req.method === 'GET' && url === '/collections') {
-        const cols = getAllCollections()
-        return json(res, 200, { collections: cols })
+        return json(res, 200, { collections: getAllCollections() })
       }
 
-      // POST /lookup — resolve DOI via CrossRef, return metadata preview
-      if (req.method === 'POST' && url === '/lookup') {
+      // POST /preview — CrossRef lookup, return enriched metadata (no save)
+      if (req.method === 'POST' && url === '/preview') {
         const body = JSON.parse(await readBody(req))
-        const doi: string | undefined = body.doi
-        if (!doi) return json(res, 400, { error: 'doi required' })
-        const work = await fetchCrossRefByDoi(doi)
-        return json(res, 200, { found: !!work, metadata: work })
+        const item = await enrich(body)
+        return json(res, 200, item)
       }
 
-      // POST /save — save item (from browser plugin)
+      // POST /save — enrich + persist
       if (req.method === 'POST' && url === '/save') {
         const body = JSON.parse(await readBody(req))
-        console.log('[server] /save received:', JSON.stringify(body).slice(0, 500))
-        let {
-          type, title, abstract, year, doi, url: itemUrl,
-          journal, publisher, volume, issue, pages, isbn, language,
-          authors = [], collectionId, pdf_url,
-        } = body
+        const { collectionId, ...rest } = body
+        const item = await enrich(rest)
 
-        // CrossRef enrichment: by DOI first, then title search fallback
-        const applyCrossRef = (cr: Awaited<ReturnType<typeof fetchCrossRefByDoi>>) => {
-          if (!cr) return
-          const dateParts =
-            cr.published?.['date-parts'] ??
-            cr['published-print']?.['date-parts'] ??
-            cr['published-online']?.['date-parts']
-          if (!doi && cr.DOI) doi = cr.DOI
-          if (!type && cr.type) type = CROSSREF_TYPE_MAP[cr.type] ?? type
-          title     = title     || cr.title?.[0]
-          abstract  = abstract  || cr.abstract?.replace(/<[^>]+>/g, '').trim()
-          year      = year      || dateParts?.[0]?.[0]
-          journal   = journal   || cr['container-title']?.[0]
-          publisher = publisher || cr.publisher
-          volume    = volume    || cr.volume
-          issue     = issue     || cr.issue
-          pages     = pages     || cr.page
-          if (!authors.length && cr.author?.length) {
-            authors = cr.author
-              .filter((a: { family?: string }) => a.family)
-              .map((a: { family: string; given?: string }) => ({
-                last_name: a.family, first_name: a.given ?? null,
-              }))
-          }
-        }
-
-        try {
-          if (doi) {
-            console.log('[server] CrossRef lookup by DOI:', doi)
-            applyCrossRef(await fetchCrossRefByDoi(doi))
-          } else if (title) {
-            console.log('[server] CrossRef search by title:', title)
-            applyCrossRef(await searchCrossRefByTitle(title))
-          }
-        } catch { /* non-fatal */ }
-        console.log('[server] after enrichment — authors:', authors.length, 'journal:', journal, 'doi:', doi)
-
-        const item = createItem({
-          type: type ?? 'journalArticle',
-          title, abstract,
-          year: year ? Number(year) : null,
-          doi, url: itemUrl,
-          journal, publisher, volume, issue, pages, isbn, language,
+        const saved = createItem({
+          type:      item.type,
+          title:     item.title,
+          abstract:  item.abstract,
+          year:      item.year,
+          doi:       item.doi,
+          url:       item.url,
+          journal:   item.journal,
+          publisher: item.publisher,
+          volume:    item.volume,
+          issue:     item.issue,
+          pages:     item.pages,
+          isbn:      item.isbn,
+          language:  item.language,
         })
 
-        if (authors.length) {
+        if (item.authors.length) {
           setCreatorsForItem(
-            item.id,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            authors.map((a: any, i: number) => ({
-              last_name: a.last_name ?? a.family ?? 'Unknown',
-              first_name: a.first_name ?? a.given ?? null,
+            saved.id,
+            item.authors.map((a, i) => ({
+              last_name:  a.last_name,
+              first_name: a.first_name,
               role: 'author' as const,
               position: i,
             }))
@@ -129,34 +168,33 @@ export function startLocalServer(): void {
         }
 
         if (collectionId) {
-          try { addItemToCollection(Number(collectionId), item.id) } catch { /* ignore */ }
+          try { addItemToCollection(Number(collectionId), saved.id) } catch { /* ok */ }
         }
 
-        // Download PDF attachment if url provided
-        if (pdf_url) {
-          addAttachmentFromUrl(item.id, pdf_url).catch(() => { /* non-fatal */ })
+        if (item.pdf_url) {
+          addAttachmentFromUrl(saved.id, item.pdf_url).catch(() => {})
         }
 
-        return json(res, 201, { success: true, item })
+        return json(res, 201, { success: true, item: saved })
       }
 
-      json(res, 404, { error: 'not found' })
+      json(res, 404, { error: 'not found', url })
     } catch (err) {
-      console.error('[server] handler error:', err)
+      console.error('[server] error:', err)
       json(res, 500, { error: String(err) })
     }
   })
 
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
-      console.warn(`[RefNest] Port ${PORT} already in use — local connector disabled`)
+      console.warn(`[RefNest] Port ${PORT} already in use — server disabled`)
     } else {
       console.error('[RefNest] Server error:', err)
     }
   })
 
   server.listen(PORT, '127.0.0.1', () => {
-    console.log(`[RefNest] Local connector listening on http://127.0.0.1:${PORT}`)
+    console.log(`[RefNest] Server listening on http://127.0.0.1:${PORT}`)
   })
 }
 

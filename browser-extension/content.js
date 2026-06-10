@@ -1,155 +1,90 @@
 // RefNest Connector — content script
-// Extracts metadata from the current page and sends it to the background worker
-
+// Strategy: extract DOI / title from page, let the server do CrossRef enrichment
 ;(function () {
   'use strict'
 
-  // ── Utility ─────────────────────────────────────────────────────────────────
-
-  function getMeta(name) {
-    const el =
-      document.querySelector(`meta[name="${name}"]`) ||
-      document.querySelector(`meta[property="${name}"]`) ||
-      document.querySelector(`meta[property="og:${name}"]`)
-    return el?.getAttribute('content')?.trim() ?? null
-  }
-
-  function getMetaAll(name) {
-    return [...document.querySelectorAll(`meta[name="${name}"]`)]
-      .map((el) => el.getAttribute('content')?.trim())
-      .filter(Boolean)
-  }
-
-  function extractDoi(text) {
+  // ── DOI extraction ──────────────────────────────────────────────────────────
+  // Finds the first valid DOI in a string
+  function parseDoi(text) {
     if (!text) return null
-    const m = text.match(/\b(10\.\d{4,9}\/[^\s"'<>[\]{}|\\^`]+)/i)
-    return m ? m[1].replace(/[.)]+$/, '') : null
+    const m = text.match(/\b(10\.\d{4,9}\/[^\s"'<>()\[\]{}]+)/i)
+    if (!m) return null
+    return m[1].replace(/[.,;:)\]}>]+$/, '')
   }
 
-  // ── Site-specific extractors ─────────────────────────────────────────────────
+  function extractDoi() {
+    // 1. URL itself  e.g. https://doi.org/10.xxxx  or  ?doi=10.xxxx
+    let doi = parseDoi(decodeURIComponent(location.href))
+    if (doi) return doi
 
-  function extractHighwire() {
-    // Used by most academic publishers (SpringerLink, Nature, ACS, etc.)
-    const doi = getMeta('citation_doi')
-    if (!doi) return null
-    const authors = getMetaAll('citation_author').map((a) => {
-      const parts = a.split(',').map((s) => s.trim())
-      return { last_name: parts[0] ?? a, first_name: parts[1] ?? null }
-    })
-    return {
-      title:     getMeta('citation_title'),
-      doi:       extractDoi(doi),
-      year:      getMeta('citation_publication_date')?.slice(0, 4) ?? getMeta('citation_year'),
-      journal:   getMeta('citation_journal_title') ?? getMeta('citation_conference_title'),
-      volume:    getMeta('citation_volume'),
-      issue:     getMeta('citation_issue'),
-      pages:     getMeta('citation_firstpage') && getMeta('citation_lastpage')
-                   ? `${getMeta('citation_firstpage')}–${getMeta('citation_lastpage')}`
-                   : getMeta('citation_firstpage'),
-      publisher: getMeta('citation_publisher'),
-      abstract:  getMeta('citation_abstract') ?? getMeta('description'),
-      pdf_url:   getMeta('citation_pdf_url'),
-      authors,
-      source: 'highwire',
+    // 2. Canonical / og:url meta
+    const canonical = document.querySelector('link[rel="canonical"]')?.href
+      || document.querySelector('meta[property="og:url"]')?.content
+    doi = parseDoi(canonical)
+    if (doi) return doi
+
+    // 3. citation_doi / DC.identifier meta tags
+    const metaNames = ['citation_doi','DC.identifier','dc.identifier','prism.doi']
+    for (const name of metaNames) {
+      const el = document.querySelector(`meta[name="${name}"],meta[property="${name}"]`)
+      doi = parseDoi(el?.content)
+      if (doi) return doi
     }
-  }
 
-  function extractDublinCore() {
-    const title = getMeta('DC.title') ?? getMeta('dc.title')
-    if (!title) return null
-    return {
-      title,
-      doi:       extractDoi(getMeta('DC.identifier') ?? getMeta('dc.identifier') ?? ''),
-      year:      (getMeta('DC.date') ?? getMeta('dc.date'))?.slice(0, 4),
-      publisher: getMeta('DC.publisher') ?? getMeta('dc.publisher'),
-      abstract:  getMeta('DC.description') ?? getMeta('dc.description'),
-      authors:   getMetaAll('DC.creator').map((a) => {
-        const parts = a.split(',').map((s) => s.trim())
-        return { last_name: parts[0] ?? a, first_name: parts[1] ?? null }
-      }),
-      source: 'dublincore',
+    // 4. Visible <a href> links containing doi.org
+    for (const a of document.querySelectorAll('a[href*="doi.org/10."]')) {
+      doi = parseDoi(a.href)
+      if (doi) return doi
     }
+
+    // 5. Scan first 5000 chars of body text
+    doi = parseDoi(document.body?.innerText?.slice(0, 5000))
+    return doi
   }
 
-  function extractOpenGraph() {
-    const title = getMeta('og:title') ?? document.title
-    const doi = extractDoi(document.URL + document.body.innerText.slice(0, 2000))
-    return {
-      title,
-      doi,
-      url:      window.location.href,
-      abstract: getMeta('og:description') ?? getMeta('description'),
-      authors:  [],
-      source:   'opengraph',
-    }
+  // ── Title extraction ────────────────────────────────────────────────────────
+  function extractTitle() {
+    return (
+      document.querySelector('meta[name="citation_title"]')?.content
+      || document.querySelector('meta[property="og:title"]')?.content
+      || document.querySelector('h1.article-title,h1.title,.article-title,#article-title')?.textContent?.trim()
+      || document.querySelector('h1')?.textContent?.trim()
+      || document.title?.replace(/\s*[-|–].*$/, '').trim()
+    ) || null
   }
 
-  function extractArXiv() {
-    if (!location.host.includes('arxiv.org')) return null
-    const title   = document.querySelector('.title')?.textContent?.replace('Title:', '').trim()
-    const abs     = document.querySelector('.abstract')?.textContent?.replace('Abstract:', '').trim()
-    const doi     = extractDoi(document.body.innerText)
-    const authors = [...document.querySelectorAll('.authors a')].map((a) => {
-      const parts = a.textContent.trim().split(' ')
-      return { last_name: parts[parts.length - 1], first_name: parts.slice(0, -1).join(' ') || null }
-    })
-    const year = document.querySelector('.submission-history')?.textContent?.match(/\b(20\d{2})\b/)?.[1]
-    if (!title) return null
-    return { title, abstract: abs, doi, year, authors, url: location.href, type: 'preprint', source: 'arxiv' }
+  // ── PDF URL ─────────────────────────────────────────────────────────────────
+  function extractPdfUrl() {
+    return (
+      document.querySelector('meta[name="citation_pdf_url"]')?.content
+      || document.querySelector('a[href$=".pdf"]')?.href
+      || null
+    )
   }
 
-  function extractPubMed() {
-    if (!location.host.includes('pubmed')) return null
-    const title    = document.querySelector('h1.heading-title')?.textContent?.trim()
-    const abstract = document.querySelector('#abstract-1 p, .abstract-content p')?.textContent?.trim()
-    const doi      = extractDoi([...document.querySelectorAll('.identifier.doi')]
-                       .map((el) => el.textContent).join(' '))
-    const journal  = document.querySelector('.journal-actions button')?.textContent?.trim()
-    const year     = document.querySelector('.cit')?.textContent?.match(/\b(20\d{2}|19\d{2})\b/)?.[1]
-    const authors  = [...document.querySelectorAll('.authors-list .full-name')].map((el) => {
-      const parts = el.textContent.trim().split(' ')
-      return { last_name: parts[parts.length - 1], first_name: parts.slice(0, -1).join(' ') || null }
-    })
-    if (!title) return null
-    return { title, abstract, doi, journal, year, authors, url: location.href, source: 'pubmed' }
+  // ── Authors (best-effort from meta only — CrossRef will fill this anyway) ──
+  function extractAuthors() {
+    const tags = [...document.querySelectorAll('meta[name="citation_author"]')]
+    return tags.map(el => {
+      const parts = (el.content || '').split(',').map(s => s.trim())
+      return { last_name: parts[0] || '', first_name: parts[1] || null }
+    }).filter(a => a.last_name)
   }
 
-  // ── Main extraction ──────────────────────────────────────────────────────────
-
+  // ── Main ────────────────────────────────────────────────────────────────────
   function extract() {
-    const meta =
-      extractArXiv()   ||
-      extractPubMed()  ||
-      extractHighwire()||
-      extractDublinCore() ||
-      extractOpenGraph()
-
-    if (!meta) return null
-
     return {
-      type:      meta.type ?? 'journalArticle',
-      title:     meta.title ?? document.title,
-      abstract:  meta.abstract ?? null,
-      doi:       meta.doi ?? null,
-      url:       meta.url ?? window.location.href,
-      year:      meta.year ? parseInt(meta.year, 10) : null,
-      journal:   meta.journal ?? null,
-      volume:    meta.volume ?? null,
-      issue:     meta.issue ?? null,
-      pages:     meta.pages ?? null,
-      publisher: meta.publisher ?? null,
-      authors:   meta.authors ?? [],
-      pdf_url:   meta.pdf_url ?? null,
-      page_url:  window.location.href,
-      source:    meta.source,
+      doi:      extractDoi(),
+      title:    extractTitle(),
+      pdf_url:  extractPdfUrl(),
+      authors:  extractAuthors(),
+      page_url: location.href,
     }
   }
-
-  // ── Message listener ─────────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg.type === 'EXTRACT_METADATA') {
-      sendResponse({ success: true, data: extract() })
+    if (msg.type === 'EXTRACT') {
+      sendResponse({ ok: true, data: extract() })
     }
     return true
   })
