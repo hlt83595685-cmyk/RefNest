@@ -5,7 +5,7 @@ import { getAllCollections } from '../db/collections'
 import { addAttachment } from '../db/attachments'
 import { fetchCrossRefByDoi } from '../crossref'
 
-const PORT = 23120
+const PORT = 23119
 let server: http.Server | null = null
 
 const CORS_HEADERS = {
