@@ -1,8 +1,8 @@
 import http from 'http'
-import { createItem, getAllItems } from '../db/items'
+import { createItem } from '../db/items'
 import { setCreatorsForItem } from '../db/creators'
-import { getAllCollections } from '../db/collections'
-import { addAttachment } from '../db/attachments'
+import { getAllCollections, addItemToCollection } from '../db/collections'
+import { addAttachmentFromUrl } from '../db/attachments'
 import { fetchCrossRefByDoi } from '../crossref'
 
 const PORT = 23119
@@ -63,11 +63,39 @@ export function startLocalServer(): void {
       // POST /save — save item (from browser plugin)
       if (req.method === 'POST' && url === '/save') {
         const body = JSON.parse(await readBody(req))
-        const {
+        let {
           type, title, abstract, year, doi, url: itemUrl,
           journal, publisher, volume, issue, pages, isbn, language,
-          authors = [], collectionId,
+          authors = [], collectionId, pdf_url,
         } = body
+
+        // Server-side CrossRef enrichment: fill any missing fields from CrossRef
+        if (doi) {
+          try {
+            const cr = await fetchCrossRefByDoi(doi)
+            if (cr) {
+              const dateParts =
+                cr.published?.['date-parts'] ??
+                cr['published-print']?.['date-parts'] ??
+                cr['published-online']?.['date-parts']
+              title     = title     || cr.title?.[0]
+              abstract  = abstract  || cr.abstract?.replace(/<[^>]+>/g, '').trim()
+              year      = year      || dateParts?.[0]?.[0]
+              journal   = journal   || cr['container-title']?.[0]
+              publisher = publisher || cr.publisher
+              volume    = volume    || cr.volume
+              issue     = issue     || cr.issue
+              pages     = pages     || cr.page
+              if (!authors.length && cr.author?.length) {
+                authors = cr.author
+                  .filter((a: { family?: string }) => a.family)
+                  .map((a: { family: string; given?: string }) => ({
+                    last_name: a.family, first_name: a.given ?? null,
+                  }))
+              }
+            }
+          } catch { /* CrossRef failure is non-fatal */ }
+        }
 
         const item = createItem({
           type: type ?? 'journalArticle',
@@ -91,10 +119,12 @@ export function startLocalServer(): void {
         }
 
         if (collectionId) {
-          try {
-            const { addItemToCollection } = await import('../db/collections')
-            addItemToCollection(collectionId, item.id)
-          } catch { /* ignore */ }
+          try { addItemToCollection(Number(collectionId), item.id) } catch { /* ignore */ }
+        }
+
+        // Download PDF attachment if url provided
+        if (pdf_url) {
+          addAttachmentFromUrl(item.id, pdf_url).catch(() => { /* non-fatal */ })
         }
 
         return json(res, 201, { success: true, item })

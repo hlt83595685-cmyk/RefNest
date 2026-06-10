@@ -1,7 +1,7 @@
-import { copyFileSync, mkdirSync, statSync, unlinkSync } from 'fs'
+import { copyFileSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { join, basename, extname } from 'path'
 import { randomUUID } from 'crypto'
-import { app } from 'electron'
+import { app, net } from 'electron'
 import { getDb } from './index'
 
 export interface Attachment {
@@ -65,4 +65,35 @@ export function getAttachmentPath(id: number): string | null {
     .prepare('SELECT path FROM attachments WHERE id = ?')
     .get(id) as { path: string | null } | undefined
   return row?.path ?? null
+}
+
+// Download a PDF from a URL and save as attachment for itemId
+export async function addAttachmentFromUrl(itemId: number, url: string): Promise<Attachment | null> {
+  try {
+    const resp = await net.fetch(url)
+    if (!resp.ok) return null
+    const buf = Buffer.from(await resp.arrayBuffer())
+    if (buf.length < 1024) return null  // too small to be a real PDF
+
+    const dir = attachmentsDir()
+    const destName = `${randomUUID()}.pdf`
+    const destPath = join(dir, destName)
+    writeFileSync(destPath, buf)
+
+    // guess filename from URL
+    const urlFilename = url.split('/').pop()?.split('?')[0] ?? 'document.pdf'
+    const filename = urlFilename.endsWith('.pdf') ? urlFilename : urlFilename + '.pdf'
+
+    const db = getDb()
+    db.prepare(`
+      INSERT INTO attachments (item_id, type, filename, path, mime_type, size)
+      VALUES (@item_id, @type, @filename, @path, @mime_type, @size)
+    `).run({ item_id: itemId, type: 'pdf', filename, path: destPath, mime_type: 'application/pdf', size: buf.length })
+
+    const id = (db.prepare('SELECT last_insert_rowid() as id').get() as { id: number }).id
+    return db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as Attachment
+  } catch (err) {
+    console.error('[attachments] addAttachmentFromUrl failed:', err)
+    return null
+  }
 }
