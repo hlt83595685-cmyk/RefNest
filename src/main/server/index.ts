@@ -8,9 +8,15 @@ import { fetchCrossRefByDoi } from '../crossref'
 const PORT = 23120
 let server: http.Server | null = null
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
+
 function json(res: http.ServerResponse, status: number, data: unknown): void {
   const body = JSON.stringify(data)
-  res.writeHead(status, { 'Content-Type': 'application/json' })
+  res.writeHead(status, { ...CORS_HEADERS, 'Content-Type': 'application/json' })
   res.end(body)
 }
 
@@ -24,18 +30,14 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 
 export function startLocalServer(): void {
   server = http.createServer(async (req, res) => {
-    // CORS — allow browser extensions and any local origin
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-
     if (req.method === 'OPTIONS') {
-      res.writeHead(204)
+      res.writeHead(204, CORS_HEADERS)
       res.end()
       return
     }
 
-    const url = req.url ?? '/'
+    // Strip query string for route matching
+    const url = (req.url ?? '/').split('?')[0]
 
     try {
       // GET /ping — health check
