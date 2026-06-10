@@ -28,6 +28,7 @@ const zh = {
     moveToTrash: '移至废纸篓',
     restore: '恢复',
     deletePermanently: '永久删除',
+    removeFromCollection: '从此分类移除',
   },
   detail: {
     title: '标题',
@@ -102,6 +103,7 @@ const en = {
     moveToTrash: 'Move to Trash',
     restore: 'Restore',
     deletePermanently: 'Delete Permanently',
+    removeFromCollection: 'Remove from Collection',
   },
   detail: {
     title: 'Title',

@@ -78,6 +78,8 @@ export function ItemListPane(): JSX.Element {
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const isTrash = activeCollection === 'trash'
+  const isCollection = activeCollection.startsWith('col:')
+  const activeColId = isCollection ? parseInt(activeCollection.slice(4), 10) : null
 
   const filtered = (() => {
     let list = items
@@ -122,6 +124,14 @@ export function ItemListPane(): JSX.Element {
 
   const handleRestore = async (id: number): Promise<void> => {
     await window.refnest.items.restore(id)
+    if (selectedId === id) setSelectedId(null)
+    await loadItems()
+    setContextMenu(null)
+  }
+
+  const handleRemoveFromCollection = async (id: number): Promise<void> => {
+    if (activeColId === null) return
+    await window.refnest.collections.removeItem(activeColId, id)
     if (selectedId === id) setSelectedId(null)
     await loadItems()
     setContextMenu(null)
@@ -201,6 +211,13 @@ export function ItemListPane(): JSX.Element {
                 onClick={() => handleRestore(contextMenu.itemId)} />
               <ContextItem label={t('item.deletePermanently')} icon="✕" color="var(--accent)"
                 onClick={() => handleDeletePermanently(contextMenu.itemId)} />
+            </>
+          ) : isCollection ? (
+            <>
+              <ContextItem label={t('item.removeFromCollection')} icon="↩" color="var(--primary)"
+                onClick={() => handleRemoveFromCollection(contextMenu.itemId)} />
+              <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"
+                onClick={() => handleTrash(contextMenu.itemId)} />
             </>
           ) : (
             <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"

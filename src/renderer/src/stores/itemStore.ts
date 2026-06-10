@@ -28,9 +28,18 @@ export const useItemStore = create<ItemStore>((set) => ({
   loadItems: async () => {
     try {
       const { activeCollection } = useItemStore.getState()
-      const items = activeCollection === 'trash'
-        ? await window.refnest.items.getTrashed()
-        : await window.refnest.items.getAll()
+      let items: Item[]
+      if (activeCollection === 'trash') {
+        items = await window.refnest.items.getTrashed()
+      } else if (activeCollection.startsWith('col:')) {
+        const colId = parseInt(activeCollection.slice(4), 10)
+        items = await window.refnest.collections.getItems(colId) as Item[]
+      } else if (activeCollection === 'recent') {
+        const all = await window.refnest.items.getAll()
+        items = all.slice(0, 50)
+      } else {
+        items = await window.refnest.items.getAll()
+      }
       set({ items: items ?? [] })
     } catch (err) {
       console.error('[itemStore] loadItems failed:', err)
