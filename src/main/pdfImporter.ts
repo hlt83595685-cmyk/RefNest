@@ -6,10 +6,9 @@ import { setCreatorsForItem } from './db/creators'
 // ── PDF text extraction via pdf-parse ───────────────────────────────────────
 
 async function extractPdfText(filePath: string): Promise<string> {
-  // pdf-parse is a CJS-only Node library, safe to require() in Electron main
+  // pdf-parse-new is a CJS-only Node library, safe to require() in Electron main
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('pdf-parse')
-  const pdfParse = (mod.default ?? mod) as (
+  const pdfParse = require('pdf-parse-new') as (
     buf: Buffer,
     opts?: { max?: number }
   ) => Promise<{ text: string }>
