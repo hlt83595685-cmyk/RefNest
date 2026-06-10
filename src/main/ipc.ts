@@ -1,7 +1,7 @@
 import { IpcMain, dialog, shell } from 'electron'
 import {
   getAllItems, getTrashedItems, getItemById,
-  createItem, updateItem, trashItem, restoreItem, permanentlyDeleteItem, searchItems
+  createItem, updateItem, trashItem, restoreItem, permanentlyDeleteItem, emptyTrash, searchItems
 } from './db/items'
 import { getCreatorsByItem, setCreatorsForItem } from './db/creators'
 import { getTagsByItem, getAllTags, setTagsForItem, deleteOrphanTags } from './db/tags'
@@ -25,6 +25,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('items:trash', (_e, id: number) => trashItem(id))
   ipcMain.handle('items:restore', (_e, id: number) => restoreItem(id))
   ipcMain.handle('items:delete', (_e, id: number) => permanentlyDeleteItem(id))
+  ipcMain.handle('items:emptyTrash', (_e, libraryId?: number) => emptyTrash(libraryId))
   ipcMain.handle('items:search', (_e, query: string) => searchItems(query))
 
   // Creators

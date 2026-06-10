@@ -105,6 +105,13 @@ export function permanentlyDeleteItem(id: number): void {
   getDb().prepare('DELETE FROM items WHERE id = ?').run(id)
 }
 
+export function emptyTrash(libraryId = 1): number {
+  const result = getDb()
+    .prepare('DELETE FROM items WHERE library_id = ? AND deleted = 1')
+    .run(libraryId)
+  return result.changes
+}
+
 export function searchItems(query: string): Item[] {
   return getDb().prepare(`
     SELECT i.* FROM items i

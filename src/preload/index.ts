@@ -11,6 +11,7 @@ const refnestAPI = {
     trash: (id: number) => ipcRenderer.invoke('items:trash', id),
     restore: (id: number) => ipcRenderer.invoke('items:restore', id),
     delete: (id: number) => ipcRenderer.invoke('items:delete', id),
+    emptyTrash: (libraryId?: number) => ipcRenderer.invoke('items:emptyTrash', libraryId),
     search: (query: string) => ipcRenderer.invoke('items:search', query),
   },
   creators: {

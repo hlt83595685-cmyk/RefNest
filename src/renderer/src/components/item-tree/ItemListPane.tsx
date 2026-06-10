@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useItemStore } from '../../stores/itemStore'
 import type { Item } from '../../../../shared/types'
 
-interface ContextMenu { x: number; y: number; itemId: number }
+interface ContextMenu { x: number; y: number; itemId: number | null }
 
 const TYPE_ICON: Record<string, string> = {
   journalArticle:  '📄',
@@ -144,6 +144,13 @@ export function ItemListPane(): JSX.Element {
     setContextMenu(null)
   }
 
+  const handleEmptyTrash = async (): Promise<void> => {
+    await window.refnest.items.emptyTrash()
+    setSelectedId(null)
+    await loadItems()
+    setContextMenu(null)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
       onClick={() => setContextMenu(null)}
@@ -162,15 +169,18 @@ export function ItemListPane(): JSX.Element {
       </div>
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div
+        style={{ flex: 1, overflowY: 'auto' }}
+        onContextMenu={isTrash ? (e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, itemId: null }) } : undefined}
+      >
         {filtered.length === 0 ? (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', height: '100%', gap: 10,
             color: 'var(--muted)',
           }}>
-            <span style={{ fontSize: 36 }}>📚</span>
-            <p style={{ fontSize: 13 }}>{t('item.empty')}</p>
+            <span style={{ fontSize: 36 }}>{isTrash ? '🗑' : '📚'}</span>
+            <p style={{ fontSize: 13 }}>{isTrash ? t('item.trashEmpty') : t('item.empty')}</p>
           </div>
         ) : (
           filtered.map((item) => (
@@ -180,7 +190,7 @@ export function ItemListPane(): JSX.Element {
               selected={selectedId === item.id}
               onClick={() => setSelectedId(item.id)}
               onDoubleClick={() => handleDoubleClick(item)}
-              onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, itemId: item.id }) }}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, itemId: item.id }) }}
             />
           ))
         )}
@@ -207,10 +217,17 @@ export function ItemListPane(): JSX.Element {
         >
           {isTrash ? (
             <>
-              <ContextItem label={t('item.restore')} icon="↩" color="var(--primary)"
-                onClick={() => handleRestore(contextMenu.itemId)} />
-              <ContextItem label={t('item.deletePermanently')} icon="✕" color="var(--accent)"
-                onClick={() => handleDeletePermanently(contextMenu.itemId)} />
+              {contextMenu.itemId !== null && (
+                <>
+                  <ContextItem label={t('item.restore')} icon="↩" color="var(--primary)"
+                    onClick={() => handleRestore(contextMenu.itemId!)} />
+                  <ContextItem label={t('item.deletePermanently')} icon="✕" color="var(--accent)"
+                    onClick={() => handleDeletePermanently(contextMenu.itemId!)} />
+                  <div style={{ height: 1, background: 'var(--separator)', margin: '4px 8px' }} />
+                </>
+              )}
+              <ContextItem label={t('item.emptyTrash')} icon="🗑" color="var(--accent)"
+                onClick={handleEmptyTrash} />
             </>
           ) : isCollection ? (
             <>

@@ -20,6 +20,8 @@ const zh = {
     new: '新建分类',
     namePlaceholder: '分类名称',
     delete: '删除分类',
+    rename: '重命名分类',
+    empty: '暂无分类',
   },
   item: {
     untitled: '（无标题）',
@@ -29,6 +31,8 @@ const zh = {
     restore: '恢复',
     deletePermanently: '永久删除',
     removeFromCollection: '从此分类移除',
+    emptyTrash: '清空废纸篓',
+    trashEmpty: '废纸篓为空',
   },
   detail: {
     title: '标题',
@@ -95,6 +99,8 @@ const en = {
     new: 'New Collection',
     namePlaceholder: 'Collection name',
     delete: 'Delete Collection',
+    rename: 'Rename Collection',
+    empty: 'No collections yet',
   },
   item: {
     untitled: '(Untitled)',
@@ -104,6 +110,8 @@ const en = {
     restore: 'Restore',
     deletePermanently: 'Delete Permanently',
     removeFromCollection: 'Remove from Collection',
+    emptyTrash: 'Empty Trash',
+    trashEmpty: 'Trash is empty',
   },
   detail: {
     title: 'Title',
