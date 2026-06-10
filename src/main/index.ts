@@ -1,5 +1,6 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, protocol, net } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase } from './db'
 import { startLocalServer, stopLocalServer } from './server'
@@ -25,7 +26,6 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow!.show()
-    if (is.dev) mainWindow!.webContents.openDevTools()
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -40,8 +40,20 @@ function createWindow(): void {
   }
 }
 
+// Register refnest-file:// protocol so the renderer can load local files
+// (file:// is blocked by Electron's CSP in sandboxed contexts)
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'refnest-file', privileges: { secure: true, supportFetchAPI: true, stream: true } },
+])
+
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.refnest.app')
+
+  protocol.handle('refnest-file', (request) => {
+    // URL format: refnest-file:///C:/path/to/file.pdf
+    const filePath = decodeURIComponent(request.url.replace('refnest-file://', ''))
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
