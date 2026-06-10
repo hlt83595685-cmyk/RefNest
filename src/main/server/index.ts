@@ -3,7 +3,7 @@ import { createItem } from '../db/items'
 import { setCreatorsForItem } from '../db/creators'
 import { getAllCollections, addItemToCollection } from '../db/collections'
 import { addAttachmentFromUrl } from '../db/attachments'
-import { fetchCrossRefByDoi } from '../crossref'
+import { fetchCrossRefByDoi, searchCrossRefByTitle, CROSSREF_TYPE_MAP } from '../crossref'
 
 const PORT = 23119
 let server: http.Server | null = null
@@ -63,39 +63,49 @@ export function startLocalServer(): void {
       // POST /save — save item (from browser plugin)
       if (req.method === 'POST' && url === '/save') {
         const body = JSON.parse(await readBody(req))
+        console.log('[server] /save received:', JSON.stringify(body).slice(0, 500))
         let {
           type, title, abstract, year, doi, url: itemUrl,
           journal, publisher, volume, issue, pages, isbn, language,
           authors = [], collectionId, pdf_url,
         } = body
 
-        // Server-side CrossRef enrichment: fill any missing fields from CrossRef
-        if (doi) {
-          try {
-            const cr = await fetchCrossRefByDoi(doi)
-            if (cr) {
-              const dateParts =
-                cr.published?.['date-parts'] ??
-                cr['published-print']?.['date-parts'] ??
-                cr['published-online']?.['date-parts']
-              title     = title     || cr.title?.[0]
-              abstract  = abstract  || cr.abstract?.replace(/<[^>]+>/g, '').trim()
-              year      = year      || dateParts?.[0]?.[0]
-              journal   = journal   || cr['container-title']?.[0]
-              publisher = publisher || cr.publisher
-              volume    = volume    || cr.volume
-              issue     = issue     || cr.issue
-              pages     = pages     || cr.page
-              if (!authors.length && cr.author?.length) {
-                authors = cr.author
-                  .filter((a: { family?: string }) => a.family)
-                  .map((a: { family: string; given?: string }) => ({
-                    last_name: a.family, first_name: a.given ?? null,
-                  }))
-              }
-            }
-          } catch { /* CrossRef failure is non-fatal */ }
+        // CrossRef enrichment: by DOI first, then title search fallback
+        const applyCrossRef = (cr: Awaited<ReturnType<typeof fetchCrossRefByDoi>>) => {
+          if (!cr) return
+          const dateParts =
+            cr.published?.['date-parts'] ??
+            cr['published-print']?.['date-parts'] ??
+            cr['published-online']?.['date-parts']
+          if (!doi && cr.DOI) doi = cr.DOI
+          if (!type && cr.type) type = CROSSREF_TYPE_MAP[cr.type] ?? type
+          title     = title     || cr.title?.[0]
+          abstract  = abstract  || cr.abstract?.replace(/<[^>]+>/g, '').trim()
+          year      = year      || dateParts?.[0]?.[0]
+          journal   = journal   || cr['container-title']?.[0]
+          publisher = publisher || cr.publisher
+          volume    = volume    || cr.volume
+          issue     = issue     || cr.issue
+          pages     = pages     || cr.page
+          if (!authors.length && cr.author?.length) {
+            authors = cr.author
+              .filter((a: { family?: string }) => a.family)
+              .map((a: { family: string; given?: string }) => ({
+                last_name: a.family, first_name: a.given ?? null,
+              }))
+          }
         }
+
+        try {
+          if (doi) {
+            console.log('[server] CrossRef lookup by DOI:', doi)
+            applyCrossRef(await fetchCrossRefByDoi(doi))
+          } else if (title) {
+            console.log('[server] CrossRef search by title:', title)
+            applyCrossRef(await searchCrossRefByTitle(title))
+          }
+        } catch { /* non-fatal */ }
+        console.log('[server] after enrichment — authors:', authors.length, 'journal:', journal, 'doi:', doi)
 
         const item = createItem({
           type: type ?? 'journalArticle',
