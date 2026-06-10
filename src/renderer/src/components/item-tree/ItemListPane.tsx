@@ -46,13 +46,26 @@ export function ItemListPane(): JSX.Element {
   const { t } = useTranslation('common')
   const { items, selectedId, setSelectedId, searchQuery, activeCollection, loadItems } =
     useItemStore()
+  const isTrash = activeCollection === 'trash'
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
+  const handleRestore = async (id: number): Promise<void> => {
+    await window.refnest.items.restore(id)
+    if (selectedId === id) setSelectedId(null)
+    await loadItems()
+    setContextMenu(null)
+  }
+
+  const handleDeletePermanently = async (id: number): Promise<void> => {
+    await window.refnest.items.delete(id)
+    if (selectedId === id) setSelectedId(null)
+    await loadItems()
+    setContextMenu(null)
+  }
+
   const filtered = (() => {
-    let list = activeCollection === 'trash'
-      ? [] // trash is loaded separately, placeholder
-      : items
+    let list = items
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
@@ -133,13 +146,32 @@ export function ItemListPane(): JSX.Element {
             border: '1px solid var(--border)',
           }}
         >
-          <button
-            className="w-full text-left px-4 py-1.5 hover:opacity-80"
-            style={{ color: 'var(--accent)' }}
-            onClick={() => handleTrash(contextMenu.itemId)}
-          >
-            🗑 {t('item.moveToTrash')}
-          </button>
+          {isTrash ? (
+            <>
+              <button
+                className="w-full text-left px-4 py-1.5 hover:opacity-80"
+                style={{ color: 'var(--primary)' }}
+                onClick={() => handleRestore(contextMenu.itemId)}
+              >
+                ↩ {t('item.restore')}
+              </button>
+              <button
+                className="w-full text-left px-4 py-1.5 hover:opacity-80"
+                style={{ color: '#e53e3e' }}
+                onClick={() => handleDeletePermanently(contextMenu.itemId)}
+              >
+                🗑 {t('item.deletePermanently')}
+              </button>
+            </>
+          ) : (
+            <button
+              className="w-full text-left px-4 py-1.5 hover:opacity-80"
+              style={{ color: 'var(--accent)' }}
+              onClick={() => handleTrash(contextMenu.itemId)}
+            >
+              🗑 {t('item.moveToTrash')}
+            </button>
+          )}
         </div>
       )}
     </div>

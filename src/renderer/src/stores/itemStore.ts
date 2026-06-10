@@ -20,7 +20,10 @@ export const useItemStore = create<ItemStore>((set) => ({
 
   loadItems: async () => {
     try {
-      const items = await window.refnest.items.getAll()
+      const { activeCollection } = useItemStore.getState()
+      const items = activeCollection === 'trash'
+        ? await window.refnest.items.getTrashed()
+        : await window.refnest.items.getAll()
       set({ items: items ?? [] })
     } catch (err) {
       console.error('[itemStore] loadItems failed:', err)
@@ -28,6 +31,10 @@ export const useItemStore = create<ItemStore>((set) => ({
   },
 
   setSelectedId: (id) => set({ selectedId: id }),
-  setActiveCollection: (id) => set({ activeCollection: id }),
+  setActiveCollection: (id) => {
+    set({ activeCollection: id, selectedId: null })
+    // reload after state update so loadItems reads the new activeCollection
+    setTimeout(() => useItemStore.getState().loadItems(), 0)
+  },
   setSearchQuery: (q) => set({ searchQuery: q }),
 }))

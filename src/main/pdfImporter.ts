@@ -2,6 +2,7 @@ import { readFileSync } from 'fs'
 import { basename } from 'path'
 import { createItem } from './db/items'
 import { setCreatorsForItem } from './db/creators'
+import { addAttachment } from './db/attachments'
 
 // ── PDF text extraction via pdf-parse ───────────────────────────────────────
 
@@ -111,7 +112,8 @@ export async function importPDF(filePath: string): Promise<number> {
     text = await extractPdfText(filePath)
   } catch (err) {
     console.error('[pdfImporter] text extraction failed:', err)
-    createItem({ type: 'journalArticle', title: basename(filePath, '.pdf') })
+    const stub = createItem({ type: 'journalArticle', title: basename(filePath, '.pdf') })
+    try { addAttachment(stub.id, filePath) } catch { /* ignore */ }
     return 1
   }
 
@@ -167,6 +169,7 @@ export async function importPDF(filePath: string): Promise<number> {
       }))
     const creators = [...authors, ...editors]
     if (creators.length) setCreatorsForItem(item.id, creators)
+    addAttachment(item.id, filePath)
     console.log(`[pdfImporter] Imported via CrossRef: "${item.title}"`)
   } else {
     const meta = parseLocalMeta(text, filePath)
@@ -177,6 +180,7 @@ export async function importPDF(filePath: string): Promise<number> {
       year: meta.year,
       doi: doi ?? null,
     })
+    addAttachment(item.id, filePath)
     console.log(`[pdfImporter] Imported via local heuristic: "${item.title}"`)
   }
 

@@ -30,7 +30,7 @@ export function MainLayout(): JSX.Element {
         {/* Right: Detail Panel */}
         {selectedId !== null && (
           <aside
-            className="shrink-0 border-l overflow-y-auto"
+            className="shrink-0 border-l overflow-hidden flex flex-col"
             style={{ width: detailWidth, borderColor: 'var(--border)' }}
           >
             <DetailPane itemId={selectedId} />

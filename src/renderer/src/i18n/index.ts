@@ -26,6 +26,8 @@ const zh = {
     empty: '暂无文献，点击"添加条目"开始',
     listHeader: '共 {{count}} 篇文献',
     moveToTrash: '移至废纸篓',
+    restore: '恢复',
+    deletePermanently: '永久删除',
   },
   detail: {
     title: '标题',
@@ -92,6 +94,8 @@ const en = {
     empty: 'No items yet. Click "Add Item" to get started.',
     listHeader: '{{count}} item(s)',
     moveToTrash: 'Move to Trash',
+    restore: 'Restore',
+    deletePermanently: 'Delete Permanently',
   },
   detail: {
     title: 'Title',
