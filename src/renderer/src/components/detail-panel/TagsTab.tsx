@@ -11,21 +11,20 @@ export function TagsTab({ itemId }: { itemId: number }): JSX.Element {
     window.refnest.tags.getByItem(itemId).then(setTags)
   }, [itemId])
 
-  const commit = async (newTags: Tag[]): Promise<void> => {
-    await window.refnest.tags.setForItem(itemId, newTags.map((t) => t.name))
-    setTags(newTags)
+  const commit = async (next: Tag[]): Promise<void> => {
+    await window.refnest.tags.setForItem(itemId, next.map((t) => t.name))
+    setTags(next)
   }
 
   const addTag = async (): Promise<void> => {
     const name = input.trim()
     if (!name || tags.some((t) => t.name === name)) return
-    const next = [...tags, { id: 0, name }]
-    await commit(next)
+    await commit([...tags, { id: 0, name }])
     setInput('')
   }
 
-  const removeTag = async (name: string): Promise<void> => {
-    await commit(tags.filter((t) => t.name !== name))
+  const removeTag = (name: string): void => {
+    commit(tags.filter((t) => t.name !== name))
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
@@ -33,46 +32,69 @@ export function TagsTab({ itemId }: { itemId: number }): JSX.Element {
   }
 
   return (
-    <div className="p-4 space-y-3">
-      <div className="flex gap-2">
+    <div style={{ padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+      {/* Input row */}
+      <div style={{ display: 'flex', gap: 8 }}>
         <input
-          className="flex-1 px-2 py-1.5 rounded border text-sm"
-          style={{ border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
           placeholder={t('detail.tagPlaceholder')}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
+          style={{
+            flex: 1, height: 34, padding: '0 10px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            fontSize: 13,
+            boxShadow: 'var(--shadow-xs)',
+          }}
         />
         <button
           onClick={addTag}
-          className="px-3 py-1.5 text-sm rounded font-medium"
-          style={{ background: 'var(--primary)', color: '#fff' }}
+          style={{
+            height: 34, padding: '0 14px',
+            borderRadius: 'var(--radius-md)', border: 'none',
+            background: 'var(--primary)', color: '#fff',
+            fontSize: 13, fontWeight: 600,
+            boxShadow: '0 2px 6px rgba(0,122,255,0.25)',
+            flexShrink: 0,
+          }}
         >
           {t('detail.addTag')}
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {tags.map((tag) => (
+      {/* Tag bubbles */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+        {tags.length === 0 ? (
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('detail.noTags')}</span>
+        ) : tags.map((tag) => (
           <span
             key={tag.name}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
-            style={{ background: 'var(--primary)', color: '#fff' }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px',
+              borderRadius: 99,
+              background: 'var(--primary-light)',
+              border: '1px solid rgba(0,122,255,0.18)',
+              color: 'var(--primary)',
+              fontSize: 12, fontWeight: 500,
+            }}
           >
             {tag.name}
             <button
               onClick={() => removeTag(tag.name)}
-              className="ml-0.5 opacity-70 hover:opacity-100"
+              style={{
+                background: 'none', border: 'none',
+                color: 'var(--primary)', fontSize: 14,
+                lineHeight: 1, opacity: 0.6, padding: 0, cursor: 'pointer',
+              }}
             >
               ×
             </button>
           </span>
         ))}
-        {tags.length === 0 && (
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            {t('detail.noTags')}
-          </span>
-        )}
       </div>
     </div>
   )

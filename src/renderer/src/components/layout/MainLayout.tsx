@@ -7,34 +7,47 @@ import { PdfReaderPane } from '../pdf-viewer/PdfReaderPane'
 import { useItemStore } from '../../stores/itemStore'
 
 export function MainLayout(): JSX.Element {
-  const [sidebarWidth] = useState(240)
-  const [detailWidth] = useState(340)
+  const [sidebarWidth] = useState(220)
+  const [detailWidth] = useState(320)
   const selectedId = useItemStore((s) => s.selectedId)
   const viewerPath = useItemStore((s) => s.viewerPath)
 
   return (
-    <div className="flex flex-col h-full">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <Toolbar />
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: Collection Tree */}
-        <aside
-          className="shrink-0 border-r overflow-y-auto"
-          style={{ width: sidebarWidth, borderColor: 'var(--border)' }}
-        >
+
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', gap: 0 }}>
+        {/* Left sidebar */}
+        <aside style={{
+          width: sidebarWidth,
+          flexShrink: 0,
+          borderRight: '1px solid var(--separator)',
+          overflowY: 'auto',
+          background: 'var(--bg)',
+        }}>
           <CollectionPane />
         </aside>
 
-        {/* Center: PDF Reader (full width) or Item List */}
-        <main className="flex-1 overflow-hidden flex flex-col">
+        {/* Center */}
+        <main style={{
+          flex: 1,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'var(--bg-elevated)',
+          borderRight: selectedId !== null && !viewerPath ? '1px solid var(--separator)' : 'none',
+        }}>
           {viewerPath ? <PdfReaderPane /> : <ItemListPane />}
         </main>
 
-        {/* Right: Detail Panel — shown when item selected, hidden during PDF fullscreen */}
+        {/* Right detail — hidden during PDF reading */}
         {selectedId !== null && !viewerPath && (
-          <aside
-            className="shrink-0 border-l overflow-hidden flex flex-col"
-            style={{ width: detailWidth, borderColor: 'var(--border)' }}
-          >
+          <aside style={{
+            width: detailWidth,
+            flexShrink: 0,
+            overflowY: 'auto',
+            background: 'var(--bg)',
+          }}>
             <DetailPane itemId={selectedId} />
           </aside>
         )}

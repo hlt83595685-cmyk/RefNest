@@ -3,52 +3,105 @@ import { useTranslation } from 'react-i18next'
 import { useItemStore } from '../../stores/itemStore'
 import type { Item } from '../../../../shared/types'
 
-interface ContextMenu {
-  x: number
-  y: number
-  itemId: number
+interface ContextMenu { x: number; y: number; itemId: number }
+
+const TYPE_ICON: Record<string, string> = {
+  journalArticle:  '📄',
+  book:            '📗',
+  bookSection:     '📖',
+  thesis:          '🎓',
+  conferencePaper: '🎤',
+  report:          '📋',
+  webpage:         '🌐',
+  preprint:        '📝',
 }
 
-function ItemRow({
-  item,
-  selected,
-  onClick,
-  onContextMenu,
-}: {
+function ItemRow({ item, selected, onClick, onContextMenu }: {
   item: Item
   selected: boolean
   onClick: () => void
   onContextMenu: (e: React.MouseEvent) => void
 }): JSX.Element {
   const { t } = useTranslation('common')
+  const icon = TYPE_ICON[item.type] ?? '📄'
+
   return (
     <div
       onClick={onClick}
       onContextMenu={onContextMenu}
-      className="flex flex-col px-4 py-2.5 cursor-pointer border-b select-none"
       style={{
-        background: selected ? 'var(--surface-hover)' : 'transparent',
-        borderColor: 'var(--border)',
-        borderLeft: selected ? '3px solid var(--primary)' : '3px solid transparent',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+        padding: '10px 14px',
+        cursor: 'pointer',
+        borderBottom: '1px solid var(--separator)',
+        background: selected ? 'var(--primary-light)' : 'transparent',
+        borderLeft: `3px solid ${selected ? 'var(--primary)' : 'transparent'}`,
+        transition: 'background var(--duration) var(--ease)',
+        userSelect: 'none',
       }}
     >
-      <span className="font-medium text-sm truncate" style={{ color: 'var(--foreground)' }}>
-        {item.title || t('item.untitled')}
-      </span>
-      <span className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-        {item.type} {item.year ? `· ${item.year}` : ''}
-      </span>
+      <span style={{ fontSize: 18, marginTop: 1, flexShrink: 0 }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{
+          fontSize: 13,
+          fontWeight: selected ? 600 : 500,
+          color: selected ? 'var(--primary)' : 'var(--foreground)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          lineHeight: 1.4,
+        }}>
+          {item.title || t('item.untitled')}
+        </p>
+        <p style={{
+          fontSize: 11,
+          color: 'var(--muted)',
+          marginTop: 2,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {[item.journal, item.year].filter(Boolean).join(' · ')}
+        </p>
+      </div>
     </div>
   )
 }
 
 export function ItemListPane(): JSX.Element {
   const { t } = useTranslation('common')
-  const { items, selectedId, setSelectedId, searchQuery, activeCollection, loadItems } =
-    useItemStore()
-  const isTrash = activeCollection === 'trash'
+  const { items, selectedId, setSelectedId, searchQuery, activeCollection, loadItems } = useItemStore()
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const isTrash = activeCollection === 'trash'
+
+  const filtered = (() => {
+    let list = items
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      list = list.filter(
+        (i) => i.title?.toLowerCase().includes(q) || i.abstract?.toLowerCase().includes(q)
+      )
+    }
+    return list
+  })()
+
+  useEffect(() => {
+    const handler = (e: MouseEvent): void => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setContextMenu(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleTrash = async (id: number): Promise<void> => {
+    await window.refnest.items.trash(id)
+    if (selectedId === id) setSelectedId(null)
+    await loadItems()
+    setContextMenu(null)
+  }
 
   const handleRestore = async (id: number): Promise<void> => {
     await window.refnest.items.restore(id)
@@ -64,62 +117,33 @@ export function ItemListPane(): JSX.Element {
     setContextMenu(null)
   }
 
-  const filtered = (() => {
-    let list = items
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      list = list.filter(
-        (i) =>
-          i.title?.toLowerCase().includes(q) ||
-          i.abstract?.toLowerCase().includes(q)
-      )
-    }
-    return list
-  })()
-
-  // Close context menu on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent): void => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setContextMenu(null)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const handleContextMenu = (e: React.MouseEvent, itemId: number): void => {
-    e.preventDefault()
-    setContextMenu({ x: e.clientX, y: e.clientY, itemId })
-  }
-
-  const handleTrash = async (id: number): Promise<void> => {
-    await window.refnest.items.trash(id)
-    if (selectedId === id) setSelectedId(null)
-    await loadItems()
-    setContextMenu(null)
-  }
-
   return (
-    <div className="flex flex-col h-full" onClick={() => setContextMenu(null)}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+      onClick={() => setContextMenu(null)}
+    >
       {/* Header */}
-      <div
-        className="flex items-center px-4 h-9 border-b text-xs font-semibold"
-        style={{ borderColor: 'var(--border)', color: 'var(--muted)', background: 'var(--surface)' }}
-      >
-        <span>{t('item.listHeader', { count: filtered.length })}</span>
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        padding: '0 14px', height: 36,
+        borderBottom: '1px solid var(--separator)',
+        background: 'var(--bg-elevated)',
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.04em' }}>
+          {t('item.listHeader', { count: filtered.length })}
+        </span>
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div style={{ flex: 1, overflowY: 'auto' }}>
         {filtered.length === 0 ? (
-          <div
-            className="flex flex-col items-center justify-center h-full gap-2"
-            style={{ color: 'var(--muted)' }}
-          >
-            <span className="text-2xl">📚</span>
-            <p className="text-sm">{t('item.empty')}</p>
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', height: '100%', gap: 10,
+            color: 'var(--muted)',
+          }}>
+            <span style={{ fontSize: 36 }}>📚</span>
+            <p style={{ fontSize: 13 }}>{t('item.empty')}</p>
           </div>
         ) : (
           filtered.map((item) => (
@@ -128,7 +152,7 @@ export function ItemListPane(): JSX.Element {
               item={item}
               selected={selectedId === item.id}
               onClick={() => setSelectedId(item.id)}
-              onContextMenu={(e) => handleContextMenu(e, item.id)}
+              onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, itemId: item.id }) }}
             />
           ))
         )}
@@ -138,42 +162,54 @@ export function ItemListPane(): JSX.Element {
       {contextMenu && (
         <div
           ref={menuRef}
-          className="fixed z-50 rounded shadow-lg py-1 text-sm min-w-36"
           style={{
+            position: 'fixed',
             top: contextMenu.y,
             left: contextMenu.x,
-            background: 'var(--surface)',
+            zIndex: 100,
+            background: 'rgba(255,255,255,0.92)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-lg)',
+            padding: '4px',
+            minWidth: 160,
           }}
         >
           {isTrash ? (
             <>
-              <button
-                className="w-full text-left px-4 py-1.5 hover:opacity-80"
-                style={{ color: 'var(--primary)' }}
-                onClick={() => handleRestore(contextMenu.itemId)}
-              >
-                ↩ {t('item.restore')}
-              </button>
-              <button
-                className="w-full text-left px-4 py-1.5 hover:opacity-80"
-                style={{ color: '#e53e3e' }}
-                onClick={() => handleDeletePermanently(contextMenu.itemId)}
-              >
-                🗑 {t('item.deletePermanently')}
-              </button>
+              <ContextItem label={t('item.restore')} icon="↩" color="var(--primary)"
+                onClick={() => handleRestore(contextMenu.itemId)} />
+              <ContextItem label={t('item.deletePermanently')} icon="✕" color="var(--accent)"
+                onClick={() => handleDeletePermanently(contextMenu.itemId)} />
             </>
           ) : (
-            <button
-              className="w-full text-left px-4 py-1.5 hover:opacity-80"
-              style={{ color: 'var(--accent)' }}
-              onClick={() => handleTrash(contextMenu.itemId)}
-            >
-              🗑 {t('item.moveToTrash')}
-            </button>
+            <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"
+              onClick={() => handleTrash(contextMenu.itemId)} />
           )}
         </div>
       )}
     </div>
+  )
+}
+
+function ContextItem({ label, icon, color, onClick }: {
+  label: string; icon: string; color: string; onClick: () => void
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        width: '100%', padding: '7px 12px',
+        borderRadius: 'var(--radius-md)', border: 'none',
+        background: 'transparent', color,
+        fontSize: 13, fontWeight: 500, textAlign: 'left',
+      }}
+    >
+      <span>{icon}</span>
+      {label}
+    </button>
   )
 }

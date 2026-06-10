@@ -15,7 +15,6 @@ export function Toolbar(): JSX.Element {
     const result = await window.refnest.import.openDialog()
     if (!result.canceled && result.imported > 0) {
       await loadItems()
-      alert(t('toolbar.importSuccess', { count: result.imported }))
     }
   }
 
@@ -28,15 +27,9 @@ export function Toolbar(): JSX.Element {
     }
   }
 
-  // Global keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
-      // Ctrl+N — new item
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-        e.preventDefault()
-        handleAdd()
-      }
-      // Ctrl+F — focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); handleAdd() }
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault()
         searchRef.current?.focus()
@@ -49,56 +42,122 @@ export function Toolbar(): JSX.Element {
 
   return (
     <header
-      className="flex items-center gap-2 px-4 h-12 border-b shrink-0"
-      style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+      style={{
+        height: 52,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '0 16px',
+        background: 'rgba(242,242,247,0.85)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderBottom: '1px solid var(--separator)',
+        flexShrink: 0,
+        zIndex: 10,
+      }}
     >
-      <span className="font-bold text-base mr-2" style={{ color: 'var(--primary)' }}>
+      {/* App name */}
+      <span style={{
+        fontSize: 15,
+        fontWeight: 700,
+        color: 'var(--primary)',
+        letterSpacing: '-0.02em',
+        marginRight: 4,
+        userSelect: 'none',
+      }}>
         RefNest
       </span>
 
       {/* Search */}
-      <input
-        ref={searchRef}
-        type="search"
-        placeholder={`${t('toolbar.search')}  Ctrl+F`}
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="w-56 h-8 px-3 text-sm rounded border outline-none"
-        style={{
-          border: '1px solid var(--border)',
-          background: 'var(--background)',
-          color: 'var(--foreground)',
-        }}
-      />
+      <div style={{ position: 'relative', flex: 1, maxWidth: 280 }}>
+        <span style={{
+          position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)',
+          color: 'var(--muted)', fontSize: 13, pointerEvents: 'none',
+        }}>
+          🔍
+        </span>
+        <input
+          ref={searchRef}
+          type="search"
+          placeholder={t('toolbar.search')}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: '100%',
+            height: 32,
+            paddingLeft: 30,
+            paddingRight: 10,
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            fontSize: 13,
+            color: 'var(--foreground)',
+            boxShadow: 'var(--shadow-xs)',
+          }}
+        />
+      </div>
 
-      <div className="flex-1" />
+      <div style={{ flex: 1 }} />
 
       {/* Import */}
       <button
         onClick={handleImport}
-        className="h-8 px-3 text-sm rounded border"
-        style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
-        title={t('toolbar.import')}
+        style={{
+          height: 32,
+          padding: '0 14px',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border)',
+          background: 'var(--surface)',
+          color: 'var(--foreground-2)',
+          fontSize: 13,
+          fontWeight: 500,
+          boxShadow: 'var(--shadow-xs)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+        }}
       >
-        📥 {t('toolbar.import')}
+        <span style={{ fontSize: 14 }}>↓</span>
+        {t('toolbar.import')}
       </button>
 
-      {/* Add item */}
+      {/* Add */}
       <button
         onClick={handleAdd}
-        className="h-8 px-3 text-sm rounded font-medium"
-        style={{ background: 'var(--primary)', color: '#fff' }}
         title="Ctrl+N"
+        style={{
+          height: 32,
+          padding: '0 14px',
+          borderRadius: 'var(--radius-md)',
+          border: 'none',
+          background: 'var(--primary)',
+          color: '#fff',
+          fontSize: 13,
+          fontWeight: 600,
+          boxShadow: '0 2px 6px rgba(0,122,255,0.30)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+        }}
       >
-        + {t('toolbar.addItem')}
+        <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+        {t('toolbar.addItem')}
       </button>
 
-      {/* Language toggle */}
+      {/* Lang toggle */}
       <button
         onClick={toggleLang}
-        className="h-8 px-3 text-sm rounded border"
-        style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
-        title={t('toolbar.switchLang')}
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border)',
+          background: 'var(--surface)',
+          color: 'var(--muted)',
+          fontSize: 12,
+          fontWeight: 600,
+          boxShadow: 'var(--shadow-xs)',
+        }}
       >
         {i18n.language === 'zh' ? 'EN' : '中'}
       </button>

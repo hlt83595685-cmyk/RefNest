@@ -21,9 +21,7 @@ export function CollectionPane(): JSX.Element {
   }
 
   const commitRename = async (): Promise<void> => {
-    if (renamingId !== null && renameVal.trim()) {
-      await rename(renamingId, renameVal.trim())
-    }
+    if (renamingId !== null && renameVal.trim()) await rename(renamingId, renameVal.trim())
     setRenamingId(null)
   }
 
@@ -38,45 +36,78 @@ export function CollectionPane(): JSX.Element {
   }
 
   const BUILT_IN = [
-    { id: 'all', label: t('collections.all') },
-    { id: 'recent', label: t('collections.recent') },
-    { id: 'trash', label: t('collections.trash') },
+    { id: 'all',    icon: '📚', label: t('collections.all') },
+    { id: 'recent', icon: '🕒', label: t('collections.recent') },
+    { id: 'trash',  icon: '🗑', label: t('collections.trash') },
   ]
 
+  const navItem = (id: string, icon: string, label: string): JSX.Element => {
+    const active = activeCollection === id
+    return (
+      <button
+        key={id}
+        onClick={() => setActiveCollection(id)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          width: '100%',
+          padding: '7px 12px',
+          borderRadius: 'var(--radius-md)',
+          border: 'none',
+          background: active ? 'var(--primary-light)' : 'transparent',
+          color: active ? 'var(--primary)' : 'var(--foreground-2)',
+          fontWeight: active ? 600 : 400,
+          fontSize: 13,
+          textAlign: 'left',
+          transition: 'background var(--duration) var(--ease)',
+        }}
+      >
+        <span style={{ fontSize: 14, width: 18, textAlign: 'center' }}>{icon}</span>
+        {label}
+      </button>
+    )
+  }
+
   return (
-    <div className="p-2 h-full flex flex-col">
-      {/* Built-in */}
-      <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+    <div style={{ padding: '12px 10px', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Section label */}
+      <p style={{
+        fontSize: 11,
+        fontWeight: 600,
+        color: 'var(--muted)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+        padding: '0 12px',
+        marginBottom: 6,
+        userSelect: 'none',
+      }}>
         {t('collections.title')}
       </p>
-      <ul className="mt-1 space-y-0.5">
-        {BUILT_IN.map((col) => (
-          <li key={col.id}>
-            <button
-              onClick={() => setActiveCollection(col.id)}
-              className="w-full text-left px-3 py-1.5 rounded text-sm"
-              style={{
-                background: activeCollection === col.id ? 'var(--surface-hover)' : 'transparent',
-                color: activeCollection === col.id ? 'var(--primary)' : 'var(--foreground)',
-                fontWeight: activeCollection === col.id ? 600 : 400,
-              }}
-            >
-              {col.id === 'all' ? '📚 ' : col.id === 'recent' ? '🕒 ' : '🗑 '}
-              {col.label}
-            </button>
-          </li>
-        ))}
-      </ul>
 
-      {/* User collections */}
-      <div className="flex items-center justify-between px-2 mt-4 mb-1">
-        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {BUILT_IN.map(({ id, icon, label }) => navItem(id, icon, label))}
+      </div>
+
+      {/* My Collections */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 12px', marginTop: 20, marginBottom: 6,
+      }}>
+        <p style={{
+          fontSize: 11, fontWeight: 600, color: 'var(--muted)',
+          textTransform: 'uppercase', letterSpacing: '0.06em', userSelect: 'none',
+        }}>
           {t('collections.myCollections')}
         </p>
         <button
           onClick={() => setAdding(true)}
-          className="text-xs"
-          style={{ color: 'var(--primary)' }}
+          style={{
+            width: 20, height: 20, borderRadius: '50%', border: 'none',
+            background: 'var(--primary-light)', color: 'var(--primary)',
+            fontSize: 14, fontWeight: 700, lineHeight: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
           title={t('collections.new')}
         >
           +
@@ -84,59 +115,85 @@ export function CollectionPane(): JSX.Element {
       </div>
 
       {adding && (
-        <div className="px-2 mb-1">
+        <div style={{ padding: '0 4px', marginBottom: 4 }}>
           <input
             autoFocus
-            className="w-full px-2 py-1 rounded border text-sm"
-            style={{ border: '1px solid var(--primary)', background: 'var(--background)', color: 'var(--foreground)' }}
             placeholder={t('collections.namePlaceholder')}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={onNewKey}
             onBlur={commitNew}
+            style={{
+              width: '100%', height: 30, padding: '0 10px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--primary)',
+              background: 'var(--surface)',
+              fontSize: 12,
+            }}
           />
         </div>
       )}
 
-      <ul className="space-y-0.5 flex-1 overflow-y-auto">
-        {collections.map((col) => (
-          <li key={col.id} className="group flex items-center">
-            {renamingId === col.id ? (
-              <input
-                autoFocus
-                className="flex-1 mx-1 px-2 py-1 rounded border text-sm"
-                style={{ border: '1px solid var(--primary)', background: 'var(--background)', color: 'var(--foreground)' }}
-                value={renameVal}
-                onChange={(e) => setRenameVal(e.target.value)}
-                onKeyDown={onRenameKey}
-                onBlur={commitRename}
-              />
-            ) : (
-              <>
-                <button
-                  onClick={() => setActiveCollection(`col:${col.id}`)}
-                  className="flex-1 text-left px-3 py-1.5 rounded text-sm truncate"
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, overflowY: 'auto' }}>
+        {collections.map((col) => {
+          const active = activeCollection === `col:${col.id}`
+          return (
+            <div key={col.id} style={{ display: 'flex', alignItems: 'center', borderRadius: 'var(--radius-md)' }}
+              className="group"
+            >
+              {renamingId === col.id ? (
+                <input
+                  autoFocus
+                  value={renameVal}
+                  onChange={(e) => setRenameVal(e.target.value)}
+                  onKeyDown={onRenameKey}
+                  onBlur={commitRename}
                   style={{
-                    background: activeCollection === `col:${col.id}` ? 'var(--surface-hover)' : 'transparent',
-                    color: activeCollection === `col:${col.id}` ? 'var(--primary)' : 'var(--foreground)',
+                    flex: 1, height: 30, padding: '0 10px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--primary)',
+                    background: 'var(--surface)', fontSize: 12, margin: '0 4px',
                   }}
-                  onDoubleClick={() => { setRenamingId(col.id); setRenameVal(col.name) }}
-                >
-                  📁 {col.name}
-                </button>
-                <button
-                  className="hidden group-hover:block px-1 text-xs"
-                  style={{ color: 'var(--muted)' }}
-                  onClick={() => remove(col.id)}
-                  title={t('collections.delete')}
-                >
-                  ×
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
+                />
+              ) : (
+                <>
+                  <button
+                    onClick={() => setActiveCollection(`col:${col.id}`)}
+                    onDoubleClick={() => { setRenamingId(col.id); setRenameVal(col.name) }}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '7px 12px',
+                      borderRadius: 'var(--radius-md)', border: 'none',
+                      background: active ? 'var(--primary-light)' : 'transparent',
+                      color: active ? 'var(--primary)' : 'var(--foreground-2)',
+                      fontWeight: active ? 600 : 400,
+                      fontSize: 13, textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>📁</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {col.name}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => remove(col.id)}
+                    title={t('collections.delete')}
+                    style={{
+                      width: 20, height: 20, borderRadius: 4, border: 'none',
+                      background: 'transparent', color: 'var(--muted)',
+                      fontSize: 14, marginRight: 4,
+                      opacity: 0,
+                    }}
+                    className="group-hover-visible"
+                  >
+                    ×
+                  </button>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

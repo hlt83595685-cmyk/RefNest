@@ -18,9 +18,7 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
     }
   }, [itemId])
 
-  useEffect(() => {
-    reload()
-  }, [itemId, reload])
+  useEffect(() => { reload() }, [itemId, reload])
 
   const handleAdd = async (): Promise<void> => {
     setLoading(true)
@@ -44,7 +42,8 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
   }
 
   const handleOpen = async (att: Attachment): Promise<void> => {
-    if (att.mime_type === 'application/pdf' || att.filename?.toLowerCase().endsWith('.pdf')) {
+    const isPdf = att.mime_type === 'application/pdf' || att.filename?.toLowerCase().endsWith('.pdf')
+    if (isPdf) {
       const path = await window.refnest.attachments.getPath(att.id)
       if (path) openPdf(path, att.filename ?? 'document.pdf')
     } else {
@@ -54,15 +53,16 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
 
   const formatSize = (bytes: number | null): string => {
     if (!bytes) return ''
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-3 flex items-center justify-between shrink-0">
-        <span className="text-xs font-medium" style={{ color: 'var(--muted)' }}>
+    <div style={{ padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           {attachments.length > 0
             ? t('attachments.count', { count: attachments.length })
             : t('attachments.empty')}
@@ -70,50 +70,83 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
         <button
           onClick={handleAdd}
           disabled={loading}
-          className="text-xs px-2 py-1 rounded"
-          style={{ background: 'var(--primary)', color: '#fff', opacity: loading ? 0.6 : 1 }}
+          style={{
+            height: 28, padding: '0 12px',
+            borderRadius: 'var(--radius-md)', border: 'none',
+            background: 'var(--primary)', color: '#fff',
+            fontSize: 12, fontWeight: 600,
+            opacity: loading ? 0.6 : 1,
+            boxShadow: '0 2px 6px rgba(0,122,255,0.25)',
+          }}
         >
           + {t('attachments.add')}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 pb-3 flex flex-col gap-1">
+      {/* List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {attachments.map((att) => (
           <div
             key={att.id}
-            className="flex items-center gap-2 px-3 py-2 rounded cursor-pointer group"
-            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 12px',
+              borderRadius: 'var(--radius-lg)',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-xs)',
+              cursor: 'pointer',
+            }}
           >
-            <span className="text-base select-none">
-              {att.mime_type === 'application/pdf' ? '📄' : '📎'}
-            </span>
+            {/* Icon */}
+            <div style={{
+              width: 36, height: 36, borderRadius: 8,
+              background: 'rgba(255,59,48,0.10)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, flexShrink: 0,
+            }}>
+              📄
+            </div>
+
+            {/* Info */}
             <div
-              className="flex-1 min-w-0 cursor-pointer"
+              style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
               onClick={() => handleOpen(att)}
             >
-              <div className="text-xs truncate font-medium" style={{ color: 'var(--foreground)' }}>
+              <p style={{
+                fontSize: 13, fontWeight: 500, color: 'var(--foreground)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
                 {att.filename ?? 'attachment'}
-              </div>
+              </p>
               {att.size != null && (
-                <div className="text-xs" style={{ color: 'var(--muted)' }}>
+                <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>
                   {formatSize(att.size)}
-                </div>
+                </p>
               )}
             </div>
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
               <button
                 onClick={() => window.refnest.attachments.openExternal(att.id)}
-                className="text-xs px-1.5 py-0.5 rounded"
-                style={{ color: 'var(--muted)', border: '1px solid var(--border)' }}
                 title={t('attachments.openExternal')}
+                style={{
+                  width: 28, height: 28, borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)', background: 'var(--surface-2)',
+                  color: 'var(--muted)', fontSize: 13,
+                }}
               >
                 ↗
               </button>
               <button
                 onClick={() => handleRemove(att.id)}
-                className="text-xs px-1.5 py-0.5 rounded"
-                style={{ color: '#e53e3e', border: '1px solid var(--border)' }}
                 title={t('attachments.remove')}
+                style={{
+                  width: 28, height: 28, borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(255,59,48,0.20)', background: 'rgba(255,59,48,0.06)',
+                  color: 'var(--accent)', fontSize: 13,
+                }}
               >
                 ✕
               </button>

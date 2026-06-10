@@ -15,44 +15,71 @@ export function PdfReaderPane(): JSX.Element {
   const src = `refnest-file://${encoded}`
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
       {/* Reader toolbar */}
-      <div
-        className="flex items-center gap-3 px-4 h-10 shrink-0 border-b"
-        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
-      >
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '0 16px', height: 46, flexShrink: 0,
+        background: 'rgba(242,242,247,0.85)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderBottom: '1px solid var(--separator)',
+      }}>
         <button
           onClick={closePdf}
-          className="text-xs px-2 py-1 rounded border"
-          style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
-          title={t('pdf.close')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            height: 30, padding: '0 12px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            color: 'var(--foreground-2)',
+            fontSize: 12, fontWeight: 500,
+            boxShadow: 'var(--shadow-xs)',
+            flexShrink: 0,
+          }}
         >
           ← {t('pdf.backToList')}
         </button>
-        <span
-          className="text-sm truncate flex-1 font-medium"
-          style={{ color: 'var(--foreground)' }}
-          title={viewerFilename ?? ''}
-        >
-          📄 {viewerFilename}
-        </span>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          flex: 1, minWidth: 0,
+        }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>📄</span>
+          <span style={{
+            fontSize: 13, fontWeight: 500,
+            color: 'var(--foreground)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {viewerFilename}
+          </span>
+        </div>
+
         <button
           onClick={() => window.refnest.attachments.openPath(viewerPath)}
-          className="text-xs px-2 py-1 rounded border"
-          style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
-          title={t('attachments.openExternal')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            height: 30, padding: '0 12px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            color: 'var(--muted)',
+            fontSize: 12, fontWeight: 500,
+            boxShadow: 'var(--shadow-xs)',
+            flexShrink: 0,
+          }}
         >
           ↗ {t('pdf.openExternal')}
         </button>
       </div>
 
-      {/* PDF iframe — takes all remaining space */}
-      <div className="flex-1 overflow-hidden">
+      {/* PDF iframe */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
         <iframe
           src={src}
-          className="w-full h-full border-0"
+          style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           title="PDF Viewer"
-          style={{ display: 'block' }}
         />
       </div>
     </div>
