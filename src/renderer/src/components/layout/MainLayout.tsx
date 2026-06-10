@@ -3,12 +3,14 @@ import { Toolbar } from './Toolbar'
 import { CollectionPane } from '../item-tree/CollectionPane'
 import { ItemListPane } from '../item-tree/ItemListPane'
 import { DetailPane } from '../detail-panel/DetailPane'
+import { PdfReaderPane } from '../pdf-viewer/PdfReaderPane'
 import { useItemStore } from '../../stores/itemStore'
 
 export function MainLayout(): JSX.Element {
-  const [sidebarWidth, setSidebarWidth] = useState(240)
-  const [detailWidth, setDetailWidth] = useState(340)
+  const [sidebarWidth] = useState(240)
+  const [detailWidth] = useState(340)
   const selectedId = useItemStore((s) => s.selectedId)
+  const viewerPath = useItemStore((s) => s.viewerPath)
 
   return (
     <div className="flex flex-col h-full">
@@ -22,13 +24,13 @@ export function MainLayout(): JSX.Element {
           <CollectionPane />
         </aside>
 
-        {/* Center: Item List */}
+        {/* Center: PDF Reader (full width) or Item List */}
         <main className="flex-1 overflow-hidden flex flex-col">
-          <ItemListPane />
+          {viewerPath ? <PdfReaderPane /> : <ItemListPane />}
         </main>
 
-        {/* Right: Detail Panel */}
-        {selectedId !== null && (
+        {/* Right: Detail Panel — shown when item selected, hidden during PDF fullscreen */}
+        {selectedId !== null && !viewerPath && (
           <aside
             className="shrink-0 border-l overflow-hidden flex flex-col"
             style={{ width: detailWidth, borderColor: 'var(--border)' }}

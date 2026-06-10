@@ -38,6 +38,7 @@ interface RefNestAPI {
     remove: (id: number) => Promise<void>
     getPath: (id: number) => Promise<string | null>
     openExternal: (id: number) => Promise<void>
+    openPath: (filePath: string) => Promise<void>
   }
   import: {
     openDialog: () => Promise<ImportResult>

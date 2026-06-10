@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Attachment } from '../../../../shared/types'
-import { PdfViewer } from '../pdf-viewer/PdfViewer'
+import { useItemStore } from '../../stores/itemStore'
 
 export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
   const { t } = useTranslation('common')
+  const { openPdf } = useItemStore()
   const [attachments, setAttachments] = useState<Attachment[]>([])
-  const [viewingPath, setViewingPath] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const reload = useCallback(async () => {
@@ -19,7 +19,6 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
   }, [itemId])
 
   useEffect(() => {
-    setViewingPath(null)
     reload()
   }, [itemId, reload])
 
@@ -38,7 +37,6 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
   const handleRemove = async (id: number): Promise<void> => {
     try {
       await window.refnest.attachments.remove(id)
-      if (viewingPath !== null) setViewingPath(null)
       await reload()
     } catch (err) {
       console.error('[AttachmentsTab] remove failed:', err)
@@ -48,7 +46,7 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
   const handleOpen = async (att: Attachment): Promise<void> => {
     if (att.mime_type === 'application/pdf' || att.filename?.toLowerCase().endsWith('.pdf')) {
       const path = await window.refnest.attachments.getPath(att.id)
-      if (path) setViewingPath(path)
+      if (path) openPdf(path, att.filename ?? 'document.pdf')
     } else {
       await window.refnest.attachments.openExternal(att.id)
     }
@@ -59,28 +57,6 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  if (viewingPath) {
-    return (
-      <div className="flex flex-col h-full">
-        <div
-          className="flex items-center gap-2 px-3 py-1.5 border-b shrink-0"
-          style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
-        >
-          <button
-            onClick={() => setViewingPath(null)}
-            className="text-xs px-2 py-1 rounded border"
-            style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
-          >
-            ← {t('attachments.backToList')}
-          </button>
-        </div>
-        <div className="flex-1 min-h-0">
-          <PdfViewer filePath={viewingPath} />
-        </div>
-      </div>
-    )
   }
 
   return (

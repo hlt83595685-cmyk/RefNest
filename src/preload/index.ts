@@ -42,6 +42,7 @@ const refnestAPI = {
     remove: (id: number) => ipcRenderer.invoke('attachments:remove', id),
     getPath: (id: number) => ipcRenderer.invoke('attachments:getPath', id),
     openExternal: (id: number) => ipcRenderer.invoke('attachments:openExternal', id),
+    openPath: (filePath: string) => ipcRenderer.invoke('attachments:openPath', filePath),
   },
   import: {
     openDialog: () => ipcRenderer.invoke('import:openDialog'),

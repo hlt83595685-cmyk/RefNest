@@ -78,6 +78,9 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     const path = getAttachmentPath(id)
     if (path) shell.openPath(path)
   })
+  ipcMain.handle('attachments:openPath', (_e, filePath: string) => {
+    shell.openPath(filePath)
+  })
 
   // Import
   ipcMain.handle('import:openDialog', async () => {

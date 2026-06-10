@@ -6,10 +6,15 @@ interface ItemStore {
   selectedId: number | null
   activeCollection: string
   searchQuery: string
+  // PDF viewer state
+  viewerPath: string | null
+  viewerFilename: string | null
   loadItems: () => Promise<void>
   setSelectedId: (id: number | null) => void
   setActiveCollection: (id: string) => void
   setSearchQuery: (q: string) => void
+  openPdf: (path: string, filename: string) => void
+  closePdf: () => void
 }
 
 export const useItemStore = create<ItemStore>((set) => ({
@@ -17,6 +22,8 @@ export const useItemStore = create<ItemStore>((set) => ({
   selectedId: null,
   activeCollection: 'all',
   searchQuery: '',
+  viewerPath: null,
+  viewerFilename: null,
 
   loadItems: async () => {
     try {
@@ -32,9 +39,10 @@ export const useItemStore = create<ItemStore>((set) => ({
 
   setSelectedId: (id) => set({ selectedId: id }),
   setActiveCollection: (id) => {
-    set({ activeCollection: id, selectedId: null })
-    // reload after state update so loadItems reads the new activeCollection
+    set({ activeCollection: id, selectedId: null, viewerPath: null })
     setTimeout(() => useItemStore.getState().loadItems(), 0)
   },
   setSearchQuery: (q) => set({ searchQuery: q }),
+  openPdf: (path, filename) => set({ viewerPath: path, viewerFilename: filename }),
+  closePdf: () => set({ viewerPath: null, viewerFilename: null }),
 }))

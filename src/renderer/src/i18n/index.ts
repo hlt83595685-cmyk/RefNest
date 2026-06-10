@@ -67,6 +67,11 @@ const zh = {
     openExternal: '用外部程序打开',
     backToList: '返回列表',
   },
+  pdf: {
+    backToList: '返回列表',
+    openExternal: '外部打开',
+    close: '关闭',
+  },
 }
 
 const en = {
@@ -134,6 +139,11 @@ const en = {
     remove: 'Remove',
     openExternal: 'Open with external app',
     backToList: 'Back to list',
+  },
+  pdf: {
+    backToList: 'Back to List',
+    openExternal: 'Open Externally',
+    close: 'Close',
   },
 }
 
