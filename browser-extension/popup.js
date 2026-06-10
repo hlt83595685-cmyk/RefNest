@@ -52,7 +52,7 @@
       <div class="empty-state">
         <span class="icon">⚠️</span>
         <p>请先启动 RefNest 桌面应用</p>
-        <p style="font-size:11px;margin-top:6px;color:#aeaeb2">端口 127.0.0.1:23119</p>
+        <p style="font-size:11px;margin-top:6px;color:#aeaeb2">端口 127.0.0.1:23119<br>用 Zotero Connector 保存时自动同步到 RefNest</p>
       </div>`
     return
   }

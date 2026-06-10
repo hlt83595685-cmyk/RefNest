@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "RefNest Connector",
-  "version": "0.1.0",
-  "description": "Save academic references to RefNest with one click",
+  "version": "0.2.0",
+  "description": "Mirror saves from Zotero Connector to RefNest, and save pages directly",
   "permissions": [
     "activeTab",
     "scripting",
     "storage"
   ],
   "host_permissions": [
-    "http://127.0.0.1:23119/*"
+    "http://127.0.0.1:23119/*",
+    "http://127.0.0.1:23120/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -25,22 +26,13 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "*://*.scholar.google.com/*",
-        "*://*.pubmed.ncbi.nlm.nih.gov/*",
-        "*://*.arxiv.org/*",
-        "*://*.doi.org/*",
-        "*://*.springer.com/*",
-        "*://*.nature.com/*",
-        "*://*.sciencedirect.com/*",
-        "*://*.wiley.com/*",
-        "*://*.tandfonline.com/*",
-        "*://*.acm.org/*",
-        "*://*.ieee.org/*",
-        "*://*.cnki.net/*",
-        "*://*.semanticscholar.org/*",
-        "*://*/*"
-      ],
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["zotero-intercept.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
