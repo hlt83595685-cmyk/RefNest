@@ -54,8 +54,16 @@ const zh = {
       attachments: '附件',
       notes: '笔记',
     },
-    attachmentsPlaceholder: '暂无附件（Phase 2 实现）',
+    attachmentsPlaceholder: '暂无附件',
     notesPlaceholder: '暂无笔记（Phase 2 实现）',
+  },
+  attachments: {
+    empty: '暂无附件',
+    count: '{{count}} 个附件',
+    add: '添加文件',
+    remove: '删除',
+    openExternal: '用外部程序打开',
+    backToList: '返回列表',
   },
 }
 
@@ -112,8 +120,16 @@ const en = {
       attachments: 'Attachments',
       notes: 'Notes',
     },
-    attachmentsPlaceholder: 'No attachments (coming in Phase 2)',
+    attachmentsPlaceholder: 'No attachments',
     notesPlaceholder: 'No notes (coming in Phase 2)',
+  },
+  attachments: {
+    empty: 'No attachments',
+    count: '{{count}} attachment(s)',
+    add: 'Add File',
+    remove: 'Remove',
+    openExternal: 'Open with external app',
+    backToList: 'Back to list',
   },
 }
 

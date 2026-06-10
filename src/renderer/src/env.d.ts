@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { Item, Creator, Collection, Tag, ImportResult } from '../../shared/types'
+import type { Item, Creator, Collection, Tag, Attachment, ImportResult } from '../../shared/types'
 
 interface RefNestAPI {
   items: {
@@ -31,6 +31,13 @@ interface RefNestAPI {
     addItem: (collectionId: number, itemId: number) => Promise<void>
     removeItem: (collectionId: number, itemId: number) => Promise<void>
     getItems: (collectionId: number) => Promise<Item[]>
+  }
+  attachments: {
+    getByItem: (itemId: number) => Promise<Attachment[]>
+    add: (itemId: number) => Promise<Attachment | null>
+    remove: (id: number) => Promise<void>
+    getPath: (id: number) => Promise<string | null>
+    openExternal: (id: number) => Promise<void>
   }
   import: {
     openDialog: () => Promise<ImportResult>

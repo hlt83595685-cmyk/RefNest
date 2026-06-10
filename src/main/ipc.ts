@@ -1,4 +1,4 @@
-import { IpcMain, dialog } from 'electron'
+import { IpcMain, dialog, shell } from 'electron'
 import {
   getAllItems, getTrashedItems, getItemById,
   createItem, updateItem, trashItem, restoreItem, permanentlyDeleteItem, searchItems
@@ -11,6 +11,9 @@ import {
 } from './db/collections'
 import { importBibTeX, importCSLJSON } from './importer'
 import { importPDF } from './pdfImporter'
+import {
+  getAttachmentsByItem, addAttachment, removeAttachment, getAttachmentPath
+} from './db/attachments'
 
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   // Items
@@ -54,6 +57,27 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('collections:getItems', (_e, collectionId: number) =>
     getItemsByCollection(collectionId)
   )
+
+  // Attachments
+  ipcMain.handle('attachments:getByItem', (_e, itemId: number) => getAttachmentsByItem(itemId))
+  ipcMain.handle('attachments:add', async (_e, itemId: number) => {
+    const result = await dialog.showOpenDialog({
+      title: 'Add Attachment',
+      filters: [
+        { name: 'PDF', extensions: ['pdf'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    return addAttachment(itemId, result.filePaths[0])
+  })
+  ipcMain.handle('attachments:remove', (_e, id: number) => removeAttachment(id))
+  ipcMain.handle('attachments:getPath', (_e, id: number) => getAttachmentPath(id))
+  ipcMain.handle('attachments:openExternal', (_e, id: number) => {
+    const path = getAttachmentPath(id)
+    if (path) shell.openPath(path)
+  })
 
   // Import
   ipcMain.handle('import:openDialog', async () => {

@@ -36,6 +36,13 @@ const refnestAPI = {
       ipcRenderer.invoke('collections:removeItem', collectionId, itemId),
     getItems: (collectionId: number) => ipcRenderer.invoke('collections:getItems', collectionId),
   },
+  attachments: {
+    getByItem: (itemId: number) => ipcRenderer.invoke('attachments:getByItem', itemId),
+    add: (itemId: number) => ipcRenderer.invoke('attachments:add', itemId),
+    remove: (id: number) => ipcRenderer.invoke('attachments:remove', id),
+    getPath: (id: number) => ipcRenderer.invoke('attachments:getPath', id),
+    openExternal: (id: number) => ipcRenderer.invoke('attachments:openExternal', id),
+  },
   import: {
     openDialog: () => ipcRenderer.invoke('import:openDialog'),
   },

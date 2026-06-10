@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useItemStore } from '../../stores/itemStore'
 import { MetadataTab } from './MetadataTab'
 import { TagsTab } from './TagsTab'
+import { AttachmentsTab } from './AttachmentsTab'
 import type { Item } from '../../../../shared/types'
 
 type Tab = 'metadata' | 'tags' | 'attachments' | 'notes'
@@ -56,11 +57,7 @@ export function DetailPane({ itemId }: { itemId: number }): JSX.Element {
       <div className="flex-1 overflow-y-auto">
         {tab === 'metadata' && <MetadataTab item={item} onSaved={handleSaved} />}
         {tab === 'tags' && <TagsTab itemId={item.id} />}
-        {tab === 'attachments' && (
-          <div className="p-4" style={{ color: 'var(--muted)' }}>
-            {t('detail.attachmentsPlaceholder')}
-          </div>
-        )}
+        {tab === 'attachments' && <AttachmentsTab itemId={item.id} />}
         {tab === 'notes' && (
           <div className="p-4" style={{ color: 'var(--muted)' }}>
             {t('detail.notesPlaceholder')}

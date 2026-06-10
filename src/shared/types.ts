@@ -65,6 +65,17 @@ export interface Tag {
   name: string
 }
 
+export interface Attachment {
+  id: number
+  item_id: number
+  type: 'pdf' | 'link' | 'other'
+  filename: string | null
+  path: string | null
+  url: string | null
+  mime_type: string | null
+  size: number | null
+}
+
 export interface ImportResult {
   canceled: boolean
   imported: number
