@@ -87,23 +87,36 @@ function extractKeywordsFromText(text: string): string[] {
 }
 
 function splitKeywords(raw: string): string[] {
-  // Replace newlines with semicolons so multi-line lists are handled uniformly
-  const flat = raw.replace(/\n/g, ';')
+  // Collapse newlines into spaces so multi-line keyword phrases are preserved
+  // e.g. "Lagrangian\nparticle tracking" → "Lagrangian particle tracking"
+  const flat = raw.replace(/\n+/g, ' ').replace(/\s{2,}/g, ' ').trim()
 
-  // Detect primary separator: if semicolons are present use them, else commas
-  const bySemicolon = flat.split(';').map((k) => k.trim()).filter((k) => k.length >= 2)
-  const useComma = bySemicolon.length <= 1
+  // Detect primary separator in priority order: · ; , (space-dot-space counts as ·)
+  // "word1 · word2" and "word1·word2" both match
+  const byDot       = flat.split(/\s*·\s*/).filter((k) => k.trim().length >= 2)
+  const bySemicolon = flat.split(/\s*;\s*/).filter((k) => k.trim().length >= 2)
+  const byComma     = flat.split(/\s*[,，]\s*/).filter((k) => k.trim().length >= 2)
 
-  const parts = useComma
-    ? flat.split(/[,，]/).map((k) => k.trim())
-    : bySemicolon
+  // Pick the separator that produces the most parts (>1 means it actually split)
+  let parts: string[]
+  if (byDot.length > 1) {
+    parts = byDot
+  } else if (bySemicolon.length > 1) {
+    parts = bySemicolon
+  } else if (byComma.length > 1) {
+    parts = byComma
+  } else {
+    // Last resort: split on two or more spaces (some PDFs use spacing as separator)
+    parts = flat.split(/\s{2,}/).filter((k) => k.trim().length >= 2)
+    if (parts.length <= 1) parts = [flat]
+  }
 
   return parts
     .map((k) =>
       k
-        .replace(/^[·•\-\s]+/, '')   // leading bullets / dashes
-        .replace(/[.。·•]+$/, '')     // trailing punctuation
-        .replace(/\s{2,}/g, ' ')      // collapse internal whitespace
+        .replace(/^[·•\-–—\s]+/, '')  // leading bullets / dashes
+        .replace(/[.。·•]+$/, '')      // trailing punctuation
+        .replace(/\s{2,}/g, ' ')       // collapse internal whitespace
         .trim()
     )
     .filter((k) => k.length >= 2 && k.length <= 80)
