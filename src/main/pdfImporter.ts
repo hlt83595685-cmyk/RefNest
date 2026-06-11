@@ -56,16 +56,58 @@ function parseLocalMeta(text: string, filename: string): LocalMeta {
 // ── Keyword extraction from PDF text ────────────────────────────────────────
 
 function extractKeywordsFromText(text: string): string[] {
-  // Match "Keywords:", "Key words:", "Index Terms:" sections common in academic PDFs
-  const m = text.match(
-    /(?:keywords?|key\s+words?|index\s+terms?)\s*[:\-—]\s*([^\n]{5,300})/i
-  )
-  if (!m) return []
-  return m[1]
-    .split(/[;,·•|\/]/)
-    .map((k) => k.trim().replace(/\.$/, ''))
-    .filter((k) => k.length >= 2 && k.length <= 60)
-    .slice(0, 15)
+  // Normalise line endings and collapse repeated whitespace within lines
+  // (pdf-parse often inserts newlines inside keyword lists)
+  const normalised = text
+    .replace(/\r\n?/g, '\n')
+    // Join lines that look like continuation of a keyword list:
+    // a line ending mid-word (no sentence-ending punctuation) followed by a
+    // line that starts lowercase or continues with a delimiter
+    .replace(/([^.\n]{1,60})\n(?=[a-z,;·•])/g, '$1 ')
+
+  // Header patterns:
+  //   Keywords:  /  Key words:  /  Index Terms:  /  关键词:
+  //   followed by the keyword text which may itself span 1-3 lines
+  const headerRe =
+    /(?:keywords?|key\s*words?|index\s+terms?|关键词)\s*[:\-—–·]\s*([\s\S]{4,400}?)(?=\n\n|\n[A-Z1-9]|$)/i
+
+  const m = normalised.match(headerRe)
+
+  if (!m) {
+    // Fallback: look for a line that IS a keyword header with no trailing text,
+    // then grab the next non-empty line(s)
+    const headerOnly = normalised.match(
+      /(?:keywords?|key\s*words?|index\s+terms?|关键词)\s*[:\-—–]?\s*\n([\s\S]{4,300}?)(?=\n\n|\n[A-Z1-9]|$)/i
+    )
+    if (!headerOnly) return []
+    return splitKeywords(headerOnly[1])
+  }
+
+  return splitKeywords(m[1])
+}
+
+function splitKeywords(raw: string): string[] {
+  // Replace newlines with semicolons so multi-line lists are handled uniformly
+  const flat = raw.replace(/\n/g, ';')
+
+  // Detect primary separator: if semicolons are present use them, else commas
+  const bySemicolon = flat.split(';').map((k) => k.trim()).filter((k) => k.length >= 2)
+  const useComma = bySemicolon.length <= 1
+
+  const parts = useComma
+    ? flat.split(/[,，]/).map((k) => k.trim())
+    : bySemicolon
+
+  return parts
+    .map((k) =>
+      k
+        .replace(/^[·•\-\s]+/, '')   // leading bullets / dashes
+        .replace(/[.。·•]+$/, '')     // trailing punctuation
+        .replace(/\s{2,}/g, ' ')      // collapse internal whitespace
+        .trim()
+    )
+    .filter((k) => k.length >= 2 && k.length <= 80)
+    .slice(0, 20)
 }
 
 // ── Main export ──────────────────────────────────────────────────────────────
@@ -183,13 +225,18 @@ export async function extractKeywordsForItem(itemId: number): Promise<{ added: n
   for (const att of pdfs) {
     try {
       const text = await extractPdfText(att.path!)
-      for (const kw of extractKeywordsFromText(text)) {
-        found.add(kw)
-      }
-    } catch { /* skip unreadable PDF */ }
+      const kws = extractKeywordsFromText(text)
+      console.log(`[pdfImporter] extractKeywordsForItem(${itemId}): found ${kws.length} keyword(s):`, kws)
+      for (const kw of kws) found.add(kw)
+    } catch (err) {
+      console.warn(`[pdfImporter] extractKeywordsForItem(${itemId}): text extraction failed`, err)
+    }
   }
 
-  if (!found.size) return { added: 0, total: 0 }
+  if (!found.size) {
+    console.log(`[pdfImporter] extractKeywordsForItem(${itemId}): no keywords found in ${pdfs.length} PDF(s)`)
+    return { added: 0, total: 0 }
+  }
 
   // Merge with existing tags (don't overwrite custom ones)
   const existing = getTagsByItem(itemId).map((t) => t.name)
