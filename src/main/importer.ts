@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { createItem } from './db/items'
 import { setCreatorsForItem } from './db/creators'
+import { setTagsForItem } from './db/tags'
 import { addItemToCollection } from './db/collections'
 
 // ── BibTeX parser (no external dependency) ──────────────────────────────────
@@ -84,6 +85,14 @@ export function importBibTeX(filePath: string, collectionId?: number): number {
       })
       setCreatorsForItem(item.id, creators)
     }
+    // BibTeX keywords field: comma or semicolon separated
+    if (f.keywords) {
+      const tags = f.keywords
+        .split(/[;,]/)
+        .map((k) => k.trim())
+        .filter((k) => k.length >= 2 && k.length <= 60)
+      if (tags.length) setTagsForItem(item.id, tags)
+    }
     count++
   }
   return count
@@ -105,6 +114,7 @@ interface CSLItem {
   page?: string
   ISBN?: string
   language?: string
+  keyword?: string
   author?: Array<{ family?: string; given?: string }>
   editor?: Array<{ family?: string; given?: string }>
 }
@@ -149,6 +159,14 @@ export function importCSLJSON(filePath: string, collectionId?: number): number {
       language: csl.language,
     })
     if (collectionId) addItemToCollection(collectionId, item.id)
+    // CSL keyword field: semicolon-separated string
+    if (csl.keyword) {
+      const tags = csl.keyword
+        .split(/[;,]/)
+        .map((k) => k.trim())
+        .filter((k) => k.length >= 2 && k.length <= 60)
+      if (tags.length) setTagsForItem(item.id, tags)
+    }
     const authors = csl.author ?? []
     const editors = csl.editor ?? []
     const creators = [

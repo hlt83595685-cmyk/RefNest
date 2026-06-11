@@ -4,6 +4,7 @@ import { createItem } from './db/items'
 import { setCreatorsForItem } from './db/creators'
 import { addAttachment } from './db/attachments'
 import { addItemToCollection } from './db/collections'
+import { setTagsForItem } from './db/tags'
 import { fetchCrossRefByDoi, CROSSREF_TYPE_MAP, type CrossRefWork } from './crossref'
 
 // ── PDF text extraction via pdf-parse ───────────────────────────────────────
@@ -50,6 +51,21 @@ function parseLocalMeta(text: string, filename: string): LocalMeta {
   const year = yearMatch ? parseInt(yearMatch[0], 10) : null
 
   return { title, abstract, year }
+}
+
+// ── Keyword extraction from PDF text ────────────────────────────────────────
+
+function extractKeywordsFromText(text: string): string[] {
+  // Match "Keywords:", "Key words:", "Index Terms:" sections common in academic PDFs
+  const m = text.match(
+    /(?:keywords?|key\s+words?|index\s+terms?)\s*[:\-—]\s*([^\n]{5,300})/i
+  )
+  if (!m) return []
+  return m[1]
+    .split(/[;,·•|\/]/)
+    .map((k) => k.trim().replace(/\.$/, ''))
+    .filter((k) => k.length >= 2 && k.length <= 60)
+    .slice(0, 15)
 }
 
 // ── Main export ──────────────────────────────────────────────────────────────
@@ -119,8 +135,18 @@ export async function importPDF(filePath: string, collectionId?: number): Promis
       }))
     const creators = [...authors, ...editors]
     if (creators.length) setCreatorsForItem(item.id, creators)
+
+    // Combine CrossRef subject + PDF keyword section
+    const pdfKeywords = extractKeywordsFromText(text)
+    const crSubjects = work.subject ?? []
+    const allKeywords = [
+      ...crSubjects,
+      ...pdfKeywords.filter((k) => !crSubjects.some((s) => s.toLowerCase() === k.toLowerCase())),
+    ]
+    if (allKeywords.length) setTagsForItem(item.id, allKeywords)
+
     addAttachment(item.id, filePath)
-    console.log(`[pdfImporter] Imported via CrossRef: "${item.title}"`)
+    console.log(`[pdfImporter] Imported via CrossRef: "${item.title}" (${allKeywords.length} keywords)`)
   } else {
     const meta = parseLocalMeta(text, filePath)
     const item = createItem({
@@ -131,8 +157,13 @@ export async function importPDF(filePath: string, collectionId?: number): Promis
       doi: doi ?? null,
     })
     if (collectionId) addItemToCollection(collectionId, item.id)
+
+    // PDF-only: extract keywords from text
+    const pdfKeywords = extractKeywordsFromText(text)
+    if (pdfKeywords.length) setTagsForItem(item.id, pdfKeywords)
+
     addAttachment(item.id, filePath)
-    console.log(`[pdfImporter] Imported via local heuristic: "${item.title}"`)
+    console.log(`[pdfImporter] Imported via local heuristic: "${item.title}" (${pdfKeywords.length} keywords)`)
   }
 
   return 1

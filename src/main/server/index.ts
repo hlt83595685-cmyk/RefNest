@@ -4,6 +4,7 @@ import { setCreatorsForItem } from '../db/creators'
 import { getAllCollections, addItemToCollection } from '../db/collections'
 import { addAttachmentFromUrl } from '../db/attachments'
 import { fetchCrossRefByDoi, searchCrossRefByTitle, CROSSREF_TYPE_MAP } from '../crossref'
+import { setTagsForItem } from '../db/tags'
 
 const PORT = 23119
 let server: http.Server | null = null
@@ -46,11 +47,13 @@ interface EnrichedItem {
   language: string | null
   authors: { last_name: string; first_name: string | null }[]
   pdf_url: string | null
+  keywords: string[]
 }
 
 async function enrich(input: Partial<EnrichedItem>): Promise<EnrichedItem> {
   let { type, title, abstract, year, doi, url, journal, publisher,
-        volume, issue, pages, isbn, language, authors = [], pdf_url } = input
+        volume, issue, pages, isbn, language, authors = [], pdf_url,
+        keywords = [] } = input
 
   const apply = (cr: Awaited<ReturnType<typeof fetchCrossRefByDoi>>) => {
     if (!cr) return
@@ -73,6 +76,16 @@ async function enrich(input: Partial<EnrichedItem>): Promise<EnrichedItem> {
       authors = cr.author
         .filter((a) => a.family)
         .map((a) => ({ last_name: a.family!, first_name: a.given ?? null }))
+    }
+    // Merge CrossRef subject tags (deduplicate)
+    if (cr.subject?.length) {
+      const existing = new Set(keywords.map((k) => k.toLowerCase()))
+      for (const s of cr.subject) {
+        if (s && !existing.has(s.toLowerCase())) {
+          keywords = [...keywords, s]
+          existing.add(s.toLowerCase())
+        }
+      }
     }
   }
 
@@ -100,6 +113,7 @@ async function enrich(input: Partial<EnrichedItem>): Promise<EnrichedItem> {
     language:  language  ?? null,
     authors:   authors   ?? [],
     pdf_url:   pdf_url   ?? null,
+    keywords:  keywords,
   }
 }
 
@@ -169,6 +183,10 @@ export function startLocalServer(): void {
 
         if (collectionId) {
           try { addItemToCollection(Number(collectionId), saved.id) } catch { /* ok */ }
+        }
+
+        if (item.keywords.length) {
+          setTagsForItem(saved.id, item.keywords)
         }
 
         if (item.pdf_url) {

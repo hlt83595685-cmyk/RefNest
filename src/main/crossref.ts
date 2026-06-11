@@ -16,6 +16,7 @@ export interface CrossRefWork {
   type?: string
   DOI?: string
   URL?: string
+  subject?: string[]
   author?: CrossRefAuthor[]
   editor?: CrossRefAuthor[]
   published?: { 'date-parts'?: number[][] }
@@ -52,7 +53,7 @@ export async function fetchCrossRefByDoi(doi: string): Promise<CrossRefWork | nu
 export async function searchCrossRefByTitle(title: string): Promise<CrossRefWork | null> {
   try {
     const q = encodeURIComponent(title.slice(0, 200))
-    const url = `https://api.crossref.org/works?query.title=${q}&rows=1&select=DOI,title,author,container-title,published,published-print,published-online,abstract,publisher,volume,issue,page,type,language`
+    const url = `https://api.crossref.org/works?query.title=${q}&rows=1&select=DOI,title,author,container-title,published,published-print,published-online,abstract,publisher,volume,issue,page,type,language,subject`
     const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers: CR_HEADERS })
     if (!res.ok) return null
     const data = (await res.json()) as { message?: { items?: Array<CrossRefWork & { score?: number }> } }
