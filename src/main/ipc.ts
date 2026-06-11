@@ -1,6 +1,7 @@
 import { IpcMain, dialog, shell } from 'electron'
 import {
   getAllItems, getTrashedItems, getItemById,
+  getAllItemsWithTags, getItemsByCollectionWithTags,
   createItem, updateItem, trashItem, restoreItem, permanentlyDeleteItem, emptyTrash, searchItems
 } from './db/items'
 import { getCreatorsByItem, setCreatorsForItem } from './db/creators'
@@ -17,8 +18,9 @@ import {
 
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   // Items
-  ipcMain.handle('items:getAll', (_e, libraryId?: number) => getAllItems(libraryId))
-  ipcMain.handle('items:getTrashed', (_e, libraryId?: number) => getTrashedItems(libraryId))
+  ipcMain.handle('items:getAll', (_e, libraryId?: number) => getAllItemsWithTags(libraryId))
+  ipcMain.handle('items:getTrashed', (_e, libraryId?: number) => getAllItemsWithTags(libraryId, 1))
+  ipcMain.handle('items:getByCollection', (_e, collectionId: number) => getItemsByCollectionWithTags(collectionId))
   ipcMain.handle('items:getById', (_e, id: number) => getItemById(id))
   ipcMain.handle('items:create', (_e, data) => createItem(data))
   ipcMain.handle('items:update', (_e, id: number, data) => updateItem(id, data))
@@ -56,7 +58,7 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     removeItemFromCollection(collectionId, itemId)
   )
   ipcMain.handle('collections:getItems', (_e, collectionId: number) =>
-    getItemsByCollection(collectionId)
+    getItemsByCollectionWithTags(collectionId)
   )
 
   // Attachments

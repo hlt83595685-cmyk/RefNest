@@ -5,6 +5,7 @@ const refnestAPI = {
   items: {
     getAll: (libraryId?: number) => ipcRenderer.invoke('items:getAll', libraryId),
     getTrashed: (libraryId?: number) => ipcRenderer.invoke('items:getTrashed', libraryId),
+    getByCollection: (collectionId: number) => ipcRenderer.invoke('items:getByCollection', collectionId),
     getById: (id: number) => ipcRenderer.invoke('items:getById', id),
     create: (data: Record<string, unknown>) => ipcRenderer.invoke('items:create', data),
     update: (id: number, data: Record<string, unknown>) => ipcRenderer.invoke('items:update', id, data),

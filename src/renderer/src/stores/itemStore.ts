@@ -33,7 +33,7 @@ export const useItemStore = create<ItemStore>((set) => ({
         items = await window.refnest.items.getTrashed()
       } else if (activeCollection.startsWith('col:')) {
         const colId = parseInt(activeCollection.slice(4), 10)
-        items = await window.refnest.collections.getItems(colId) as Item[]
+        items = await window.refnest.items.getByCollection(colId) as Item[]
       } else if (activeCollection === 'recent') {
         const all = await window.refnest.items.getAll()
         items = all.slice(0, 50)

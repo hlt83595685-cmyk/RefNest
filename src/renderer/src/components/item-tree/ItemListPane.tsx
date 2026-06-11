@@ -68,6 +68,33 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
         }}>
           {[item.journal, item.year].filter(Boolean).join(' · ')}
         </p>
+        {item.tags && item.tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+            {item.tags.slice(0, 6).map((tag) => (
+              <span key={tag} style={{
+                display: 'inline-block',
+                padding: '1px 7px',
+                borderRadius: 100,
+                fontSize: 10,
+                fontWeight: 500,
+                background: selected ? 'rgba(0,122,255,0.15)' : 'var(--bg-elevated)',
+                color: selected ? 'var(--primary)' : 'var(--foreground-3)',
+                border: `1px solid ${selected ? 'rgba(0,122,255,0.25)' : 'var(--border)'}`,
+                lineHeight: 1.6,
+                whiteSpace: 'nowrap',
+              }}>
+                {tag}
+              </span>
+            ))}
+            {item.tags.length > 6 && (
+              <span style={{
+                fontSize: 10, color: 'var(--muted)', lineHeight: 1.6, alignSelf: 'center',
+              }}>
+                +{item.tags.length - 6}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

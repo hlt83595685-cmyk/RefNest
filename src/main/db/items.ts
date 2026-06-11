@@ -37,6 +37,60 @@ export function getTrashedItems(libraryId = 1): Item[] {
     .all(libraryId) as Item[]
 }
 
+export function getAllItemsWithTags(libraryId = 1, deleted = 0): Item[] {
+  const items = getDb()
+    .prepare('SELECT * FROM items WHERE library_id = ? AND deleted = ? ORDER BY updated_at DESC')
+    .all(libraryId, deleted) as Item[]
+
+  if (items.length === 0) return items
+
+  // Fetch all tag associations in one query and group by item_id
+  const rows = getDb().prepare(`
+    SELECT it.item_id, t.name
+    FROM item_tags it
+    JOIN tags t ON t.id = it.tag_id
+    WHERE it.item_id IN (${items.map(() => '?').join(',')})
+    ORDER BY t.name
+  `).all(...items.map((i) => i.id)) as { item_id: number; name: string }[]
+
+  const tagMap = new Map<number, string[]>()
+  for (const row of rows) {
+    const arr = tagMap.get(row.item_id) ?? []
+    arr.push(row.name)
+    tagMap.set(row.item_id, arr)
+  }
+
+  return items.map((item) => ({ ...item, tags: tagMap.get(item.id) ?? [] }))
+}
+
+export function getItemsByCollectionWithTags(collectionId: number): Item[] {
+  const items = getDb().prepare(`
+    SELECT i.* FROM items i
+    JOIN collection_items ci ON ci.item_id = i.id
+    WHERE ci.collection_id = ? AND i.deleted = 0
+    ORDER BY i.updated_at DESC
+  `).all(collectionId) as Item[]
+
+  if (items.length === 0) return items
+
+  const rows = getDb().prepare(`
+    SELECT it.item_id, t.name
+    FROM item_tags it
+    JOIN tags t ON t.id = it.tag_id
+    WHERE it.item_id IN (${items.map(() => '?').join(',')})
+    ORDER BY t.name
+  `).all(...items.map((i) => i.id)) as { item_id: number; name: string }[]
+
+  const tagMap = new Map<number, string[]>()
+  for (const row of rows) {
+    const arr = tagMap.get(row.item_id) ?? []
+    arr.push(row.name)
+    tagMap.set(row.item_id, arr)
+  }
+
+  return items.map((item) => ({ ...item, tags: tagMap.get(item.id) ?? [] }))
+}
+
 export function getItemById(id: number): Item | undefined {
   return getDb().prepare('SELECT * FROM items WHERE id = ?').get(id) as Item | undefined
 }

@@ -20,6 +20,7 @@ export interface Item {
   created_at: number
   updated_at: number
   version: number
+  tags?: string[]  // populated by getAllItemsWithTags
 }
 
 export type ItemType =
