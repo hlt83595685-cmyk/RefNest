@@ -17,6 +17,7 @@
   --foreground-2:   #3a3a3c;
   --muted:          #8e8e93;
   --muted-2:        #aeaeb2;
+  --muted-bg:       rgba(120,120,128,0.08);
 
   /* iOS Blue */
   --primary:        #007aff;
@@ -60,6 +61,7 @@
   --foreground-2:   #ebebf5;
   --muted:          #8e8e93;
   --muted-2:        #636366;
+  --muted-bg:       rgba(255,255,255,0.06);
   --primary:        #0a84ff;
   --primary-light:  rgba(10,132,255,0.15);
   --shadow-xs:  0 1px 2px rgba(0,0,0,0.30);
@@ -126,3 +128,12 @@ button:active { opacity: 0.75; transform: scale(0.97); }
 
 /* Selection highlight */
 ::selection { background: var(--primary-light); }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes led-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 5px 1px rgba(0,122,255,0.6); }
+  50%       { opacity: 0.5; box-shadow: 0 0 2px 0px rgba(0,122,255,0.2); }
+}

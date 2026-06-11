@@ -1,10 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { MainLayout } from './components/layout/MainLayout'
+import { Pdf2mdDialog } from './components/tools/Pdf2mdDialog'
 import { useItemStore } from './stores/itemStore'
+import { useStatusStore } from './stores/statusStore'
 import './i18n'
 
 export default function App(): JSX.Element {
   const { loadItems, selectedId, setSelectedId } = useItemStore()
+  const { setStatus } = useStatusStore()
+  const [showPdf2md, setShowPdf2md] = useState(false)
 
   useEffect(() => {
     // Verify preload bridge is available
@@ -14,6 +18,18 @@ export default function App(): JSX.Element {
     }
     loadItems()
   }, [loadItems])
+
+  // Listen for menu: 工具 > pdf2md settings
+  useEffect(() => {
+    const cleanup = window.electron.ipcRenderer.on('tool:open-settings', () => setShowPdf2md(true))
+    return cleanup
+  }, [])
+
+  // Global pdf2md status feed
+  useEffect(() => {
+    window.refnest.onPdf2mdStatus((e) => setStatus(e))
+    return () => window.refnest.offPdf2mdStatus()
+  }, [setStatus])
 
   // Global Delete key — trash selected item
   useEffect(() => {
@@ -38,6 +54,7 @@ export default function App(): JSX.Element {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <MainLayout />
+      {showPdf2md && <Pdf2mdDialog onClose={() => setShowPdf2md(false)} />}
     </div>
   )
 }

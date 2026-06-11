@@ -1,6 +1,30 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
+// All ipcRenderer.on listeners must be registered at the top level of the
+// preload script -- contextBridge cannot serialize listener registrations
+// that are nested inside sub-objects.
+
+type Pdf2mdStatusCb = (e: {
+  filename: string
+  state: 'running' | 'done' | 'error' | 'idle'
+  message: string
+  chunk?: string
+  pending: number
+}) => void
+
+type Pdf2mdProgressCb = (p: {
+  state: string
+  message?: string
+  progress?: number
+}) => void
+
+let _pdf2mdStatusCb: Pdf2mdStatusCb | null = null
+let _pdf2mdProgressCb: Pdf2mdProgressCb | null = null
+
+ipcRenderer.on('pdf2md:status', (_ev, e) => { _pdf2mdStatusCb?.(e) })
+ipcRenderer.on('tool:pdf2md:progress', (_ev, p) => { _pdf2mdProgressCb?.(p) })
+
 const refnestAPI = {
   items: {
     getAll: (libraryId?: number) => ipcRenderer.invoke('items:getAll', libraryId),
@@ -49,6 +73,23 @@ const refnestAPI = {
   },
   import: {
     openDialog: (collectionId?: number) => ipcRenderer.invoke('import:openDialog', collectionId),
+  },
+  settings: {
+    get: (key: string) => ipcRenderer.invoke('settings:get', key),
+    set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),
+  },
+  // pdf2md status (queue-level, single LED)
+  onPdf2mdStatus: (cb: Pdf2mdStatusCb) => { _pdf2mdStatusCb = cb },
+  offPdf2mdStatus: () => { _pdf2mdStatusCb = null },
+  // tools
+  tools: {
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+    pickPdf: () => ipcRenderer.invoke('tool:pick-pdf'),
+    pickDir: () => ipcRenderer.invoke('tool:pick-dir'),
+    pdf2md: (filePath: string, outputDir: string) =>
+      ipcRenderer.invoke('tool:pdf2md', filePath, outputDir),
+    onPdf2mdProgress: (cb: Pdf2mdProgressCb) => { _pdf2mdProgressCb = cb },
+    offPdf2mdProgress: () => { _pdf2mdProgressCb = null },
   },
 }
 

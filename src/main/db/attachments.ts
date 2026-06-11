@@ -51,6 +51,32 @@ export function addAttachment(itemId: number, srcPath: string): Attachment {
   return db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as Attachment
 }
 
+/**
+ * Register an existing file as an attachment without copying it.
+ * Used for .md files that must live alongside their source PDF.
+ */
+export function registerAttachment(itemId: number, filePath: string): Attachment {
+  const db = getDb()
+  const ext = extname(filePath).toLowerCase()
+  const filename = basename(filePath)
+
+  let size: number | null = null
+  try { size = statSync(filePath).size } catch { /* ignore */ }
+
+  const mime = ext === '.pdf' ? 'application/pdf'
+    : ext === '.md' ? 'text/markdown'
+    : null
+  const type = ext === '.pdf' ? 'pdf' : ext === '.md' ? 'markdown' : 'other'
+
+  db.prepare(`
+    INSERT INTO attachments (item_id, type, filename, path, mime_type, size)
+    VALUES (@item_id, @type, @filename, @path, @mime_type, @size)
+  `).run({ item_id: itemId, type, filename, path: filePath, mime_type: mime, size })
+
+  const id = (db.prepare('SELECT last_insert_rowid() as id').get() as { id: number }).id
+  return db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as Attachment
+}
+
 export function removeAttachment(id: number): void {
   const db = getDb()
   const row = db.prepare('SELECT path FROM attachments WHERE id = ?').get(id) as { path: string | null } | undefined

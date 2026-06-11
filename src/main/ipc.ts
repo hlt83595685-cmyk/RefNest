@@ -1,4 +1,6 @@
-import { IpcMain, dialog, shell } from 'electron'
+import { IpcMain, dialog, shell, BrowserWindow } from 'electron'
+import { convertPdfToMarkdown } from './mineruApi'
+import { saveSettings, isPdf2mdEnabled } from './pdf2mdService'
 import {
   getAllItems, getTrashedItems, getItemById,
   getAllItemsWithTags, getItemsByCollectionWithTags,
@@ -15,6 +17,7 @@ import { importPDF, extractKeywordsForItem } from './pdfImporter'
 import {
   getAttachmentsByItem, addAttachment, removeAttachment, getAttachmentPath
 } from './db/attachments'
+
 
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   // Items
@@ -113,4 +116,51 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('items:extractKeywords', async (_e, itemId: number) => {
     return extractKeywordsForItem(itemId)
   })
+
+  // Open URL in system browser
+  ipcMain.handle('shell:openExternal', (_e, url: string) => shell.openExternal(url))
+
+  // Settings sync
+  ipcMain.handle('settings:get', (_e, key: string) => {
+    if (key === 'tool.pdf2md.enabled') return isPdf2mdEnabled()
+    return null
+  })
+  ipcMain.handle('settings:set', (_e, key: string, value: unknown) => {
+    saveSettings({ [key]: value })
+  })
+
+  // Pick PDF file (used by settings dialog)
+  ipcMain.handle('tool:pick-pdf', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(win ?? BrowserWindow.getFocusedWindow()!, {
+      title: '选择 PDF 文件',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      properties: ['openFile'],
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  // Pick output directory (used by settings dialog)
+  ipcMain.handle('tool:pick-dir', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(win ?? BrowserWindow.getFocusedWindow()!, {
+      title: '选择输出目录',
+      properties: ['openDirectory'],
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  // PDF to Markdown via MinerU API (caller provides paths)
+  ipcMain.handle('tool:pdf2md', async (event, filePath: string, outputDir: string) => {
+    const sendProgress = (p: { state: string; message?: string; progress?: number }): void => {
+      event.sender.send('tool:pdf2md:progress', p)
+    }
+    try {
+      const outPath = await convertPdfToMarkdown(filePath, outputDir, {}, sendProgress)
+      return { outPath }
+    } catch (err) {
+      return { error: (err as Error).message }
+    }
+  })
+
 }

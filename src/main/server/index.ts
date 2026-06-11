@@ -5,6 +5,7 @@ import { getAllCollections, addItemToCollection } from '../db/collections'
 import { addAttachmentFromUrl } from '../db/attachments'
 import { fetchCrossRefByDoi, searchCrossRefByTitle, CROSSREF_TYPE_MAP } from '../crossref'
 import { setTagsForItem } from '../db/tags'
+import { autoConvertPdfToMd } from '../pdf2mdService'
 
 const PORT = 23119
 let server: http.Server | null = null
@@ -190,7 +191,9 @@ export function startLocalServer(): void {
         }
 
         if (item.pdf_url) {
-          addAttachmentFromUrl(saved.id, item.pdf_url).catch(() => {})
+          addAttachmentFromUrl(saved.id, item.pdf_url).then((att) => {
+            if (att?.path) autoConvertPdfToMd(saved.id, att.path)
+          }).catch(() => {})
         }
 
         return json(res, 201, { success: true, item: saved })

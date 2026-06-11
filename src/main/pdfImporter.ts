@@ -6,6 +6,7 @@ import { getAttachmentsByItem, addAttachment } from './db/attachments'
 import { addItemToCollection } from './db/collections'
 import { getTagsByItem, setTagsForItem } from './db/tags'
 import { fetchCrossRefByDoi, CROSSREF_TYPE_MAP, type CrossRefWork } from './crossref'
+import { autoConvertPdfToMd } from './pdf2mdService'
 
 // ── PDF text extraction via pdf-parse ───────────────────────────────────────
 
@@ -134,6 +135,7 @@ export async function importPDF(filePath: string, collectionId?: number): Promis
     const stub = createItem({ type: 'journalArticle', title: basename(filePath, '.pdf') })
     if (collectionId) addItemToCollection(collectionId, stub.id)
     try { addAttachment(stub.id, filePath) } catch { /* ignore */ }
+    autoConvertPdfToMd(stub.id, filePath)
     return 1
   }
 
@@ -202,6 +204,7 @@ export async function importPDF(filePath: string, collectionId?: number): Promis
 
     addAttachment(item.id, filePath)
     console.log(`[pdfImporter] Imported via CrossRef: "${item.title}" (${allKeywords.length} keywords)`)
+    autoConvertPdfToMd(item.id, filePath)
   } else {
     const meta = parseLocalMeta(text, filePath)
     const item = createItem({
@@ -219,6 +222,7 @@ export async function importPDF(filePath: string, collectionId?: number): Promis
 
     addAttachment(item.id, filePath)
     console.log(`[pdfImporter] Imported via local heuristic: "${item.title}" (${pdfKeywords.length} keywords)`)
+    autoConvertPdfToMd(item.id, filePath)
   }
 
   return 1

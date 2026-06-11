@@ -51,6 +51,14 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
     }
   }
 
+  const getAttIcon = (att: Attachment): { icon: string; bg: string; color: string } => {
+    const isMd = att.mime_type === 'text/markdown' || att.filename?.toLowerCase().endsWith('.md')
+    if (isMd) return { icon: 'M↓', bg: 'rgba(52,199,89,0.12)', color: '#34c759' }
+    const isPdf = att.mime_type === 'application/pdf' || att.filename?.toLowerCase().endsWith('.pdf')
+    if (isPdf) return { icon: 'PDF', bg: 'rgba(255,59,48,0.10)', color: '#ff3b30' }
+    return { icon: '···', bg: 'rgba(142,142,147,0.12)', color: 'var(--muted)' }
+  }
+
   const formatSize = (bytes: number | null): string => {
     if (!bytes) return ''
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
@@ -85,7 +93,9 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
 
       {/* List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {attachments.map((att) => (
+        {attachments.map((att) => {
+          const { icon, bg, color } = getAttIcon(att)
+          return (
           <div
             key={att.id}
             style={{
@@ -101,11 +111,12 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
             {/* Icon */}
             <div style={{
               width: 36, height: 36, borderRadius: 8,
-              background: 'rgba(255,59,48,0.10)',
+              background: bg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, flexShrink: 0,
+              fontSize: 11, fontWeight: 700, color, flexShrink: 0,
+              letterSpacing: '-0.03em',
             }}>
-              📄
+              {icon}
             </div>
 
             {/* Info */}
@@ -152,7 +163,8 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
               </button>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

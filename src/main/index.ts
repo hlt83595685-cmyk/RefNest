@@ -1,10 +1,11 @@
-import { app, BrowserWindow, shell, ipcMain, protocol, net } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, protocol, net, Menu } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase } from './db'
 import { startLocalServer, stopLocalServer } from './server'
 import { registerIpcHandlers } from './ipc'
+import { setMainWindowRef } from './pdf2mdService'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -15,7 +16,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -26,6 +27,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow!.show()
+    setMainWindowRef(mainWindow!)
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -74,6 +76,21 @@ app.whenReady().then(async () => {
   }
   registerIpcHandlers(ipcMain)
   console.log('[main] IPC handlers registered')
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: '工具',
+      submenu: [
+        {
+          label: 'pdf2md',
+          click: (): void => {
+            mainWindow?.webContents.send('tool:open-settings')
+          },
+        },
+      ],
+    },
+  ])
+  Menu.setApplicationMenu(menu)
 
   createWindow()
 

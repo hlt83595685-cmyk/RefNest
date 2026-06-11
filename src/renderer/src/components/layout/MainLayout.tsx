@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Toolbar } from './Toolbar'
+import { StatusBar } from './StatusBar'
 import { CollectionPane } from '../item-tree/CollectionPane'
 import { ItemListPane } from '../item-tree/ItemListPane'
 import { DetailPane } from '../detail-panel/DetailPane'
@@ -52,6 +53,8 @@ export function MainLayout(): JSX.Element {
           </aside>
         )}
       </div>
+
+      <StatusBar />
     </div>
   )
 }
