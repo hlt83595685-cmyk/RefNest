@@ -46,6 +46,7 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
       }}
     >
       <span style={{ fontSize: 18, marginTop: 1, flexShrink: 0 }}>{icon}</span>
+      {/* Title + tags */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
           fontSize: 13,
@@ -58,16 +59,6 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
         }}>
           {item.title || t('item.untitled')}
         </p>
-        <p style={{
-          fontSize: 11,
-          color: 'var(--muted)',
-          marginTop: 2,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-          {item.journal || ''}
-        </p>
         {item.tags && item.tags.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
             {item.tags.slice(0, 6).map((tag) => (
@@ -78,7 +69,7 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
                 fontSize: 10,
                 fontWeight: 500,
                 background: selected ? 'rgba(0,122,255,0.15)' : 'var(--bg-elevated)',
-                color: selected ? 'var(--primary)' : 'var(--foreground-3)',
+                color: selected ? 'var(--primary)' : 'var(--foreground-2)',
                 border: `1px solid ${selected ? 'rgba(0,122,255,0.25)' : 'var(--border)'}`,
                 lineHeight: 1.6,
                 whiteSpace: 'nowrap',
@@ -96,17 +87,38 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
           </div>
         )}
       </div>
+      {/* Journal column */}
+      <div style={{
+        flexShrink: 0,
+        width: 130,
+        textAlign: 'right',
+        paddingTop: 2,
+        overflow: 'hidden',
+      }}>
+        <span style={{
+          display: 'block',
+          fontSize: 11,
+          fontWeight: 400,
+          color: selected ? 'var(--primary)' : 'var(--foreground-2)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {item.journal ?? ''}
+        </span>
+      </div>
       {/* Year column */}
       <div style={{
         flexShrink: 0,
-        width: 42,
+        width: 40,
         textAlign: 'right',
-        paddingTop: 1,
+        paddingTop: 2,
       }}>
         <span style={{
           fontSize: 12,
-          fontWeight: selected ? 600 : 400,
-          color: selected ? 'var(--primary)' : 'var(--muted)',
+          fontWeight: selected ? 600 : 500,
+          color: selected ? 'var(--primary)' : 'var(--accent-orange)',
+          letterSpacing: '-0.01em',
         }}>
           {item.year ?? '—'}
         </span>
@@ -229,25 +241,33 @@ export function ItemListPane(): JSX.Element {
         <span style={{ flex: 1, fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.04em' }}>
           {t('item.listHeader', { count: filtered.length })}
         </span>
+        {/* Journal column header */}
+        <span style={{
+          width: 130, textAlign: 'right', flexShrink: 0,
+          fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.04em',
+        }}>
+          {t('item.journalColumn')}
+        </span>
+        {/* Year column header — clickable sort */}
         <button
           onClick={toggleYearSort}
           title={yearSort === 'desc' ? t('item.sortYearReset') : t('item.sortYearDesc')}
           style={{
-            display: 'flex', alignItems: 'center', gap: 3,
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-md)',
-            border: `1px solid ${yearSort === 'desc' ? 'var(--primary)' : 'var(--border)'}`,
-            background: yearSort === 'desc' ? 'var(--primary-light)' : 'transparent',
-            color: yearSort === 'desc' ? 'var(--primary)' : 'var(--muted)',
-            fontSize: 11, fontWeight: yearSort === 'desc' ? 600 : 400,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2,
+            width: 40, flexShrink: 0,
+            padding: '2px 0',
+            border: 'none',
+            background: 'transparent',
+            color: yearSort === 'desc' ? 'var(--accent-orange)' : 'var(--muted)',
+            fontSize: 11, fontWeight: yearSort === 'desc' ? 700 : 600,
+            letterSpacing: '0.04em',
             cursor: 'pointer',
-            transition: 'all var(--duration) var(--ease)',
-            flexShrink: 0,
+            transition: 'color var(--duration) var(--ease)',
           }}
         >
           {t('item.yearColumn')}
-          <span style={{ fontSize: 9, lineHeight: 1 }}>
-            {yearSort === 'desc' ? ' ↓' : ' ↕'}
+          <span style={{ fontSize: 8, lineHeight: 1, marginTop: 1 }}>
+            {yearSort === 'desc' ? '↓' : '↕'}
           </span>
         </button>
       </div>
