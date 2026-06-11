@@ -66,7 +66,7 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
         }}>
-          {[item.journal, item.year].filter(Boolean).join(' · ')}
+          {item.journal || ''}
         </p>
         {item.tags && item.tags.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
@@ -96,13 +96,28 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
           </div>
         )}
       </div>
+      {/* Year column */}
+      <div style={{
+        flexShrink: 0,
+        width: 42,
+        textAlign: 'right',
+        paddingTop: 1,
+      }}>
+        <span style={{
+          fontSize: 12,
+          fontWeight: selected ? 600 : 400,
+          color: selected ? 'var(--primary)' : 'var(--muted)',
+        }}>
+          {item.year ?? '—'}
+        </span>
+      </div>
     </div>
   )
 }
 
 export function ItemListPane(): JSX.Element {
   const { t } = useTranslation('common')
-  const { items, selectedId, setSelectedId, searchQuery, activeCollection, loadItems } = useItemStore()
+  const { items, selectedId, setSelectedId, searchQuery, activeCollection, loadItems, yearSort, toggleYearSort } = useItemStore()
   const { collections } = useCollectionStore()
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -117,6 +132,9 @@ export function ItemListPane(): JSX.Element {
       list = list.filter(
         (i) => i.title?.toLowerCase().includes(q) || i.abstract?.toLowerCase().includes(q)
       )
+    }
+    if (yearSort === 'desc') {
+      list = [...list].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
     }
     return list
   })()
@@ -206,10 +224,32 @@ export function ItemListPane(): JSX.Element {
         borderBottom: '1px solid var(--separator)',
         background: 'var(--bg-elevated)',
         flexShrink: 0,
+        gap: 8,
       }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.04em' }}>
+        <span style={{ flex: 1, fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '0.04em' }}>
           {t('item.listHeader', { count: filtered.length })}
         </span>
+        <button
+          onClick={toggleYearSort}
+          title={yearSort === 'desc' ? t('item.sortYearReset') : t('item.sortYearDesc')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 3,
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-md)',
+            border: `1px solid ${yearSort === 'desc' ? 'var(--primary)' : 'var(--border)'}`,
+            background: yearSort === 'desc' ? 'var(--primary-light)' : 'transparent',
+            color: yearSort === 'desc' ? 'var(--primary)' : 'var(--muted)',
+            fontSize: 11, fontWeight: yearSort === 'desc' ? 600 : 400,
+            cursor: 'pointer',
+            transition: 'all var(--duration) var(--ease)',
+            flexShrink: 0,
+          }}
+        >
+          {t('item.yearColumn')}
+          <span style={{ fontSize: 9, lineHeight: 1 }}>
+            {yearSort === 'desc' ? ' ↓' : ' ↕'}
+          </span>
+        </button>
       </div>
 
       {/* List */}

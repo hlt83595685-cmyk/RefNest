@@ -35,6 +35,9 @@ const zh = {
     trashEmpty: '废纸篓为空',
     addToCollection: '添加到分类',
     moveToCollection: '移动到分类',
+    yearColumn: '发表年份',
+    sortYearDesc: '按年份降序排列',
+    sortYearReset: '恢复默认排序',
   },
   detail: {
     title: '标题',
@@ -116,6 +119,9 @@ const en = {
     trashEmpty: 'Trash is empty',
     addToCollection: 'Add to Collection',
     moveToCollection: 'Move to Collection',
+    yearColumn: 'Year',
+    sortYearDesc: 'Sort by year (newest first)',
+    sortYearReset: 'Reset sort order',
   },
   detail: {
     title: 'Title',

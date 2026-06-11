@@ -6,6 +6,7 @@ interface ItemStore {
   selectedId: number | null
   activeCollection: string
   searchQuery: string
+  yearSort: 'none' | 'desc'
   // PDF viewer state
   viewerPath: string | null
   viewerFilename: string | null
@@ -13,6 +14,7 @@ interface ItemStore {
   setSelectedId: (id: number | null) => void
   setActiveCollection: (id: string) => void
   setSearchQuery: (q: string) => void
+  toggleYearSort: () => void
   openPdf: (path: string, filename: string) => void
   closePdf: () => void
 }
@@ -22,6 +24,7 @@ export const useItemStore = create<ItemStore>((set) => ({
   selectedId: null,
   activeCollection: 'all',
   searchQuery: '',
+  yearSort: 'none',
   viewerPath: null,
   viewerFilename: null,
 
@@ -48,10 +51,11 @@ export const useItemStore = create<ItemStore>((set) => ({
 
   setSelectedId: (id) => set({ selectedId: id }),
   setActiveCollection: (id) => {
-    set({ activeCollection: id, selectedId: null, viewerPath: null })
+    set({ activeCollection: id, selectedId: null, viewerPath: null, yearSort: 'none' })
     setTimeout(() => useItemStore.getState().loadItems(), 0)
   },
   setSearchQuery: (q) => set({ searchQuery: q }),
+  toggleYearSort: () => set((s) => ({ yearSort: s.yearSort === 'desc' ? 'none' : 'desc' })),
   openPdf: (path, filename) => set({ viewerPath: path, viewerFilename: filename }),
   closePdf: () => set({ viewerPath: null, viewerFilename: null }),
 }))
