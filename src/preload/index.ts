@@ -13,6 +13,7 @@ const refnestAPI = {
     restore: (id: number) => ipcRenderer.invoke('items:restore', id),
     delete: (id: number) => ipcRenderer.invoke('items:delete', id),
     emptyTrash: (libraryId?: number) => ipcRenderer.invoke('items:emptyTrash', libraryId),
+    extractKeywords: (itemId: number) => ipcRenderer.invoke('items:extractKeywords', itemId),
     search: (query: string) => ipcRenderer.invoke('items:search', query),
   },
   creators: {

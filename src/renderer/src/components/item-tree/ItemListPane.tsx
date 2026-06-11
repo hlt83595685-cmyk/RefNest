@@ -60,18 +60,23 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
           {item.title || t('item.untitled')}
         </p>
         {item.tags && item.tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
             {item.tags.slice(0, 6).map((tag) => (
               <span key={tag} style={{
                 display: 'inline-block',
-                padding: '1px 7px',
-                borderRadius: 100,
-                fontSize: 10,
-                fontWeight: 500,
-                background: selected ? 'rgba(0,122,255,0.15)' : 'var(--bg-elevated)',
+                padding: '2px 8px',
+                borderRadius: 4,
+                fontSize: 10.5,
+                fontFamily: 'Cambria, "Times New Roman", Georgia, serif',
+                fontStyle: 'italic',
+                fontWeight: 400,
+                letterSpacing: '0.01em',
+                background: selected
+                  ? 'rgba(0,122,255,0.12)'
+                  : 'rgba(60,60,67,0.06)',
                 color: selected ? 'var(--primary)' : 'var(--foreground-2)',
-                border: `1px solid ${selected ? 'rgba(0,122,255,0.25)' : 'var(--border)'}`,
-                lineHeight: 1.6,
+                border: `1px solid ${selected ? 'rgba(0,122,255,0.22)' : 'rgba(60,60,67,0.14)'}`,
+                lineHeight: 1.7,
                 whiteSpace: 'nowrap',
               }}>
                 {tag}
@@ -79,7 +84,8 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
             ))}
             {item.tags.length > 6 && (
               <span style={{
-                fontSize: 10, color: 'var(--muted)', lineHeight: 1.6, alignSelf: 'center',
+                fontSize: 10, color: 'var(--muted-2)', lineHeight: 1.7,
+                alignSelf: 'center', fontFamily: 'Cambria, serif',
               }}>
                 +{item.tags.length - 6}
               </span>
@@ -210,6 +216,12 @@ export function ItemListPane(): JSX.Element {
     setContextMenu(null)
   }
 
+  const handleExtractKeywords = async (itemId: number): Promise<void> => {
+    setContextMenu(null)
+    const result = await window.refnest.items.extractKeywords(itemId)
+    if (result.added > 0) await loadItems()
+  }
+
   const handleMoveToCollection = async (itemId: number, colId: number): Promise<void> => {
     // Remove from current collection (if in one), add to target
     if (activeColId !== null) {
@@ -335,6 +347,10 @@ export function ItemListPane(): JSX.Element {
             </>
           ) : isCollection ? (
             <>
+              {contextMenu.itemId !== null && (
+                <ContextItem label={t('item.extractKeywords')} icon="🔑" color="var(--foreground)"
+                  onClick={() => handleExtractKeywords(contextMenu.itemId!)} />
+              )}
               {contextMenu.itemId !== null && collections.filter(c => c.id !== activeColId).length > 0 && (
                 <CollectionSubMenu
                   label={t('item.moveToCollection')}
@@ -350,6 +366,10 @@ export function ItemListPane(): JSX.Element {
             </>
           ) : (
             <>
+              {contextMenu.itemId !== null && (
+                <ContextItem label={t('item.extractKeywords')} icon="🔑" color="var(--foreground)"
+                  onClick={() => handleExtractKeywords(contextMenu.itemId!)} />
+              )}
               {collections.length > 0 && contextMenu.itemId !== null && (
                 <CollectionSubMenu
                   label={t('item.addToCollection')}
@@ -357,7 +377,7 @@ export function ItemListPane(): JSX.Element {
                   onSelect={(colId) => handleAddToCollection(contextMenu.itemId!, colId)}
                 />
               )}
-              {collections.length > 0 && <div style={{ height: 1, background: 'var(--separator)', margin: '4px 8px' }} />}
+              {<div style={{ height: 1, background: 'var(--separator)', margin: '4px 8px' }} />}
               <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"
                 onClick={() => handleTrash(contextMenu.itemId)} />
             </>

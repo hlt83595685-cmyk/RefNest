@@ -66,20 +66,33 @@ export function TagsTab({ itemId }: { itemId: number }): JSX.Element {
       </div>
 
       {/* Tag bubbles */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {tags.length === 0 ? (
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('detail.noTags')}</span>
+          <span style={{
+            fontSize: 13,
+            fontFamily: 'Cambria, "Times New Roman", Georgia, serif',
+            fontStyle: 'italic',
+            color: 'var(--muted)',
+          }}>
+            {t('detail.noTags')}
+          </span>
         ) : tags.map((tag) => (
           <span
             key={tag.name}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '4px 10px',
-              borderRadius: 99,
-              background: 'var(--primary-light)',
-              border: '1px solid rgba(0,122,255,0.18)',
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px 4px 12px',
+              borderRadius: 6,
+              background: 'rgba(0,122,255,0.08)',
+              border: '1px solid rgba(0,122,255,0.20)',
               color: 'var(--primary)',
-              fontSize: 12, fontWeight: 500,
+              fontFamily: 'Cambria, "Times New Roman", Georgia, serif',
+              fontSize: 12.5,
+              fontStyle: 'italic',
+              fontWeight: 400,
+              letterSpacing: '0.015em',
+              lineHeight: 1.6,
+              transition: 'background var(--duration) var(--ease)',
             }}
           >
             {tag.name}
@@ -87,8 +100,9 @@ export function TagsTab({ itemId }: { itemId: number }): JSX.Element {
               onClick={() => removeTag(tag.name)}
               style={{
                 background: 'none', border: 'none',
-                color: 'var(--primary)', fontSize: 14,
-                lineHeight: 1, opacity: 0.6, padding: 0, cursor: 'pointer',
+                color: 'var(--primary)', fontSize: 15,
+                lineHeight: 1, opacity: 0.45, padding: '0 0 1px',
+                cursor: 'pointer', flexShrink: 0,
               }}
             >
               ×

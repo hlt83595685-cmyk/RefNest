@@ -2,9 +2,9 @@ import { readFileSync } from 'fs'
 import { basename } from 'path'
 import { createItem } from './db/items'
 import { setCreatorsForItem } from './db/creators'
-import { addAttachment } from './db/attachments'
+import { getAttachmentsByItem, addAttachment } from './db/attachments'
 import { addItemToCollection } from './db/collections'
-import { setTagsForItem } from './db/tags'
+import { getTagsByItem, setTagsForItem } from './db/tags'
 import { fetchCrossRefByDoi, CROSSREF_TYPE_MAP, type CrossRefWork } from './crossref'
 
 // ── PDF text extraction via pdf-parse ───────────────────────────────────────
@@ -167,4 +167,36 @@ export async function importPDF(filePath: string, collectionId?: number): Promis
   }
 
   return 1
+}
+
+// ── On-demand extraction for existing items ──────────────────────────────────
+
+export async function extractKeywordsForItem(itemId: number): Promise<{ added: number; total: number }> {
+  const attachments = getAttachmentsByItem(itemId)
+  const pdfs = attachments.filter(
+    (a) => a.path && (a.mime_type === 'application/pdf' || a.filename?.toLowerCase().endsWith('.pdf'))
+  )
+  if (!pdfs.length) return { added: 0, total: 0 }
+
+  // Collect keywords from all PDF attachments
+  const found = new Set<string>()
+  for (const att of pdfs) {
+    try {
+      const text = await extractPdfText(att.path!)
+      for (const kw of extractKeywordsFromText(text)) {
+        found.add(kw)
+      }
+    } catch { /* skip unreadable PDF */ }
+  }
+
+  if (!found.size) return { added: 0, total: 0 }
+
+  // Merge with existing tags (don't overwrite custom ones)
+  const existing = getTagsByItem(itemId).map((t) => t.name)
+  const existingLower = new Set(existing.map((n) => n.toLowerCase()))
+  const newKeywords = [...found].filter((k) => !existingLower.has(k.toLowerCase()))
+  const merged = [...existing, ...newKeywords]
+  setTagsForItem(itemId, merged)
+
+  return { added: newKeywords.length, total: merged.length }
 }

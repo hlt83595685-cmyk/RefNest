@@ -11,7 +11,7 @@ import {
   addItemToCollection, removeItemFromCollection, getItemsByCollection
 } from './db/collections'
 import { importBibTeX, importCSLJSON } from './importer'
-import { importPDF } from './pdfImporter'
+import { importPDF, extractKeywordsForItem } from './pdfImporter'
 import {
   getAttachmentsByItem, addAttachment, removeAttachment, getAttachmentPath
 } from './db/attachments'
@@ -107,5 +107,10 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
       else if (lower.endsWith('.json')) imported += importCSLJSON(filePath, collectionId)
     }
     return { canceled: false, imported }
+  })
+
+  // Extract keywords from PDF attachments and save as tags
+  ipcMain.handle('items:extractKeywords', async (_e, itemId: number) => {
+    return extractKeywordsForItem(itemId)
   })
 }
