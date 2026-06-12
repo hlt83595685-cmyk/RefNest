@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
-import { TextLayer } from 'pdfjs-dist'
+import { TextLayer, AnnotationMode } from 'pdfjs-dist'
 import { AnnotationFactory } from 'annotpdf'
 import 'pdfjs-dist/web/pdf_viewer.css'
 
@@ -23,7 +23,6 @@ interface PendingNote {
 export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // The current PDF document proxy — update this to trigger a full re-render
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null)
   const [numPages, setNumPages] = useState(0)
   const [scale, setScale] = useState(1.5)
@@ -35,10 +34,10 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const [pendingNote, setPendingNote] = useState<PendingNote | null>(null)
 
   const workerReadyRef = useRef(false)
-  // Always holds the latest PDF bytes on disk — used when writing annotations
   const pdfBytesRef = useRef<Uint8Array | null>(null)
-  // viewport cache for coordinate conversion
   const viewportsRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map())
+  // ref to current pdfDoc so callbacks don't capture stale closure
+  const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null)
 
   const initWorker = useCallback(async () => {
     if (workerReadyRef.current) return
@@ -49,44 +48,8 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob)
   }, [])
 
-  // Load PDF from disk into pdfBytesRef and pdfDoc state
-  const loadPdf = useCallback(async (bytes: Uint8Array) => {
-    pdfBytesRef.current = bytes
-    viewportsRef.current.clear()
-    const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-    setPdfDoc(prev => {
-      prev?.destroy()
-      return doc
-    })
-    setNumPages(doc.numPages)
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-
-    async function load(): Promise<void> {
-      try {
-        await initWorker()
-        // IPC returns number[] (plain array — lossless across contextBridge)
-        const raw = await window.refnest.fs.readFile(filePath)
-        if (cancelled) return
-        const bytes = new Uint8Array(raw)
-        await loadPdf(bytes)
-        setLoading(false)
-      } catch (e) {
-        if (!cancelled) {
-          setError(String(e))
-          setLoading(false)
-        }
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [filePath, initWorker, loadPdf])
-
-  // Render a single page: canvas + TextLayer
+  // Render one page from a given doc (canvas + TextLayer)
+  // annotationMode=ENABLE so PDF-embedded annotations (highlight, note icons) show on canvas
   const renderPage = useCallback(async (
     doc: pdfjsLib.PDFDocumentProxy,
     pageNum: number,
@@ -100,9 +63,12 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     if (!canvas) return
     canvas.width = viewport.width
     canvas.height = viewport.height
-    await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise
+    await page.render({
+      canvasContext: canvas.getContext('2d')!,
+      viewport,
+      annotationMode: AnnotationMode.ENABLE,
+    }).promise
 
-    // Replace TextLayer
     const wrapper = document.getElementById(`pdf-page-${pageNum}`)
     if (!wrapper) return
     wrapper.querySelector('.textLayer')?.remove()
@@ -118,7 +84,35 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     await tl.render()
   }, [])
 
-  // Re-render all pages whenever pdfDoc or scale changes
+  // Initial load
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    async function load(): Promise<void> {
+      try {
+        await initWorker()
+        const raw = await window.refnest.fs.readFile(filePath)
+        if (cancelled) return
+        const bytes = new Uint8Array(raw)
+        pdfBytesRef.current = bytes
+        viewportsRef.current.clear()
+        const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
+        if (cancelled) return
+        pdfDocRef.current = doc
+        setPdfDoc(doc)
+        setNumPages(doc.numPages)
+        setLoading(false)
+      } catch (e) {
+        if (!cancelled) { setError(String(e)); setLoading(false) }
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [filePath, initWorker])
+
+  // Re-render all pages when doc first loads or scale changes
   useEffect(() => {
     if (!pdfDoc) return
     viewportsRef.current.clear()
@@ -133,8 +127,22 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     return () => { cancelled = true }
   }, [pdfDoc, scale, renderPage])
 
-  // Write annotation bytes, persist to disk, reload doc
+  // Re-render only one page from fresh bytes after writing an annotation.
+  // Does NOT update pdfDoc state — avoids triggering full re-render.
+  const rerenderPageFromBytes = useCallback(async (pageNum: number, bytes: Uint8Array) => {
+    const tmpDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
+    await renderPage(tmpDoc, pageNum, scale)
+    tmpDoc.destroy()
+    // Keep pdfDocRef updated so subsequent annotations parse the correct doc
+    const newDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
+    pdfDocRef.current?.destroy()
+    pdfDocRef.current = newDoc
+    setPdfDoc(newDoc)
+  }, [scale, renderPage])
+
+  // Write annotation, save to disk, re-render only the affected page
   const applyAnnotation = useCallback(async (
+    pageNum: number,
     mutate: (factory: AnnotationFactory) => void
   ) => {
     if (!pdfBytesRef.current) return
@@ -143,17 +151,16 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
       const factory = new AnnotationFactory(pdfBytesRef.current)
       mutate(factory)
       const result = factory.write()
-      // writeFile expects number[] — Uint8Array must be converted for contextBridge
       await window.refnest.fs.writeFile(filePath, Array.from(result))
-      await loadPdf(result)
+      pdfBytesRef.current = result
+      await rerenderPageFromBytes(pageNum, result)
     } catch (err) {
       console.error('[PdfAnnotationViewer] annotation failed:', err)
     } finally {
       setSaving(false)
     }
-  }, [filePath, loadPdf])
+  }, [filePath, rerenderPageFromBytes])
 
-  // Get page number from a DOM node (walks up to find data-page)
   function pageNumOfNode(node: Node | null): number | null {
     let el = node instanceof Element ? node : node?.parentElement
     while (el) {
@@ -164,7 +171,6 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     return null
   }
 
-  // Convert selection DOMRect → PDF coordinate rect
   function selectionToPdfRect(
     viewport: pdfjsLib.PageViewport,
     canvas: HTMLCanvasElement,
@@ -178,7 +184,6 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
 
   const handleMouseUp = useCallback(async () => {
     if (tool !== 'highlight') return
-
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
     const range = sel.getRangeAt(0)
@@ -187,7 +192,6 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
 
     const pageNum = pageNumOfNode(sel.anchorNode)
     if (!pageNum) return
-
     const viewport = viewportsRef.current.get(pageNum)
     const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
     if (!viewport || !canvas) return
@@ -195,7 +199,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     const pdfRect = selectionToPdfRect(viewport, canvas, selRect)
     sel.removeAllRanges()
 
-    await applyAnnotation(factory => {
+    await applyAnnotation(pageNum, factory => {
       factory.createHighlightAnnotation({
         page: pageNum - 1,
         rect: pdfRect,
@@ -212,7 +216,6 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     const viewport = viewportsRef.current.get(pageNum)
     const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
     if (!viewport || !canvas) return
-
     const cr = canvas.getBoundingClientRect()
     const [pdfX, pdfY] = viewport.convertToPdfPoint(e.clientX - cr.left, e.clientY - cr.top)
     setPendingNote({ screenX: e.clientX, screenY: e.clientY, pdfX, pdfY, pageNum })
@@ -222,7 +225,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const confirmNote = useCallback(async () => {
     if (!pendingNote) return
     setPendingNote(null)
-    await applyAnnotation(factory => {
+    await applyAnnotation(pendingNote.pageNum, factory => {
       factory.createTextAnnotation({
         page: pendingNote.pageNum - 1,
         rect: [pendingNote.pdfX, pendingNote.pdfY, pendingNote.pdfX + 20, pendingNote.pdfY + 20],
@@ -233,8 +236,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   }, [pendingNote, noteText, applyAnnotation])
 
   const btnStyle = (t: Tool): React.CSSProperties => ({
-    padding: '4px 10px',
-    borderRadius: 6,
+    padding: '4px 10px', borderRadius: 6,
     border: '1px solid var(--border)',
     background: tool === t ? '#2563eb' : 'var(--surface)',
     color: tool === t ? '#fff' : 'var(--foreground-2)',
