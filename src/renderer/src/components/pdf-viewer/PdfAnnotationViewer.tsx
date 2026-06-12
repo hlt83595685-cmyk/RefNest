@@ -186,6 +186,11 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const [notePopup, setNotePopup] = useState<{ id: string; editing: boolean } | null>(null)
   const [editText, setEditText] = useState('')
 
+  // Rubber-band rect for erase tool (screen coords relative to scroll container)
+  const [eraseDrag, setEraseDrag] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
+  const eraseDragRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
+  const erasePageRef = useRef<number | null>(null)
+
   const pdfBytesRef = useRef<Uint8Array | null>(null)
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null)
   const viewportsRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map())
@@ -367,10 +372,92 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     return [Math.min(x1p, x2p), Math.min(y1p, y2p), Math.max(x1p, x2p), Math.max(y1p, y2p)]
   }
 
-  const handleMouseUp = useCallback(async () => {
-    const t = toolRef.current
-    if (t !== 'highlight' && t !== 'erase') return
+  // ── erase drag handlers ──
 
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (toolRef.current !== 'erase') return
+    // Identify which page was clicked
+    let el = e.target as HTMLElement | null
+    let pageNum: number | null = null
+    while (el) {
+      const p = el.dataset?.page
+      if (p) { pageNum = parseInt(p, 10); break }
+      el = el.parentElement
+    }
+    if (!pageNum) return
+    erasePageRef.current = pageNum
+    const scrollEl = scrollRef.current
+    const scrollTop = scrollEl ? scrollEl.scrollTop : 0
+    const scrollLeft = scrollEl ? scrollEl.scrollLeft : 0
+    const d = { x1: e.clientX + scrollLeft, y1: e.clientY + scrollTop, x2: e.clientX + scrollLeft, y2: e.clientY + scrollTop }
+    eraseDragRef.current = d
+    setEraseDrag({ ...d })
+    e.preventDefault()
+  }, [])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (toolRef.current !== 'erase' || !eraseDragRef.current) return
+    const scrollEl = scrollRef.current
+    const scrollTop = scrollEl ? scrollEl.scrollTop : 0
+    const scrollLeft = scrollEl ? scrollEl.scrollLeft : 0
+    const d = { ...eraseDragRef.current, x2: e.clientX + scrollLeft, y2: e.clientY + scrollTop }
+    eraseDragRef.current = d
+    setEraseDrag({ ...d })
+  }, [])
+
+  const handleMouseUp = useCallback(async (e?: React.MouseEvent) => {
+    const t = toolRef.current
+
+    // ── erase: rubber-band drag ──
+    if (t === 'erase') {
+      const drag = eraseDragRef.current
+      const pageNum = erasePageRef.current
+      eraseDragRef.current = null
+      erasePageRef.current = null
+      setEraseDrag(null)
+      if (!drag || !pageNum || !pdfBytesRef.current) return
+      const viewport = viewportsRef.current.get(pageNum)
+      const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
+      if (!viewport || !canvas) return
+
+      const scrollEl = scrollRef.current
+      const scrollTop = scrollEl ? scrollEl.scrollTop : 0
+      const scrollLeft = scrollEl ? scrollEl.scrollLeft : 0
+      // drag coords are client+scroll; convert back to client for getBoundingClientRect comparison
+      const cr = canvas.getBoundingClientRect()
+      const rx1 = Math.min(drag.x1, drag.x2) - scrollLeft - cr.left
+      const ry1 = Math.min(drag.y1, drag.y2) - scrollTop - cr.top
+      const rx2 = Math.max(drag.x1, drag.x2) - scrollLeft - cr.left
+      const ry2 = Math.max(drag.y1, drag.y2) - scrollTop - cr.top
+      if (rx2 - rx1 < 2 && ry2 - ry1 < 2) return
+
+      const [px1, py1] = viewport.convertToPdfPoint(rx1, ry1)
+      const [px2, py2] = viewport.convertToPdfPoint(rx2, ry2)
+      const sx1 = Math.min(px1, px2), sy1 = Math.min(py1, py2)
+      const sx2 = Math.max(px1, px2), sy2 = Math.max(py1, py2)
+
+      const toRemove = highlightsRef.current.filter(h => {
+        if (h.pageNum !== pageNum) return false
+        const [hx1, hy1, hx2, hy2] = h.pdfRect
+        return sx1 < hx2 && sx2 > hx1 && sy1 < hy2 && sy2 > hy1
+      })
+      if (toRemove.length === 0) return
+      const ids = toRemove.map(h => h.id)
+      const nextHls = highlightsRef.current.filter(h => !ids.includes(h.id))
+      setHighlights(nextHls)
+      setSaving(true)
+      try {
+        const newBytes = await removeAnnotsFromPdf(pdfBytesRef.current, ids)
+        await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
+        await refreshPdfDoc(newBytes)
+        await rerenderPage(pageNum, nextHls)
+      } catch (err) { console.error('[erase save]', err) }
+      finally { setSaving(false) }
+      return
+    }
+
+    // ── highlight: text selection ──
+    if (t !== 'highlight') return
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
     const range = sel.getRangeAt(0)
@@ -385,44 +472,18 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     const pdfRect = selectionToPdfRect(viewport, canvas, selRect)
     sel.removeAllRanges()
 
-    if (t === 'highlight') {
-      const col = HIGHLIGHT_COLORS[hlColorIdx]
-      const id = `hl-${Date.now()}`
-      const newHl: HighlightRect = { id, pageNum, pdfRect, color: col.css }
-      // Instant canvas draw
-      drawHighlightsOnPage(pageNum, [newHl], viewport)
-      setHighlights(prev => [...prev, newHl])
-      // Background PDF write
-      setSaving(true)
-      try {
-        const newBytes = await addHighlightToPdf(pdfBytesRef.current, pageNum - 1, pdfRect, id, col.pdf)
-        await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
-        await refreshPdfDoc(newBytes)
-      } catch (err) { console.error('[highlight save]', err) }
-      finally { setSaving(false) }
-
-    } else if (t === 'erase') {
-      // Find all highlights whose rect overlaps the selection rect
-      const [sx1, sy1, sx2, sy2] = pdfRect
-      const toRemove = highlightsRef.current.filter(h => {
-        if (h.pageNum !== pageNum) return false
-        const [hx1, hy1, hx2, hy2] = h.pdfRect
-        return sx1 < hx2 && sx2 > hx1 && sy1 < hy2 && sy2 > hy1
-      })
-      if (toRemove.length === 0) return
-      const ids = toRemove.map(h => h.id)
-      const nextHls = highlightsRef.current.filter(h => !ids.includes(h.id))
-      setHighlights(nextHls)
-      // Re-render the page to clear removed highlights (need full canvas clear)
-      setSaving(true)
-      try {
-        const newBytes = await removeAnnotsFromPdf(pdfBytesRef.current, ids)
-        await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
-        await refreshPdfDoc(newBytes)
-        await rerenderPage(pageNum, nextHls)
-      } catch (err) { console.error('[erase save]', err) }
-      finally { setSaving(false) }
-    }
+    const col = HIGHLIGHT_COLORS[hlColorIdx]
+    const id = `hl-${Date.now()}`
+    const newHl: HighlightRect = { id, pageNum, pdfRect, color: col.css }
+    drawHighlightsOnPage(pageNum, [newHl], viewport)
+    setHighlights(prev => [...prev, newHl])
+    setSaving(true)
+    try {
+      const newBytes = await addHighlightToPdf(pdfBytesRef.current, pageNum - 1, pdfRect, id, col.pdf)
+      await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
+      await refreshPdfDoc(newBytes)
+    } catch (err) { console.error('[highlight save]', err) }
+    finally { setSaving(false) }
   }, [hlColorIdx, filePath, drawHighlightsOnPage, refreshPdfDoc, rerenderPage])
 
   // ── note placement ──
@@ -560,10 +621,29 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
       {/* ── Scroll area ── */}
       <div
         ref={scrollRef}
-        style={{ flex: 1, overflowY: 'auto', background: '#525659', padding: '16px 0' }}
+        style={{ flex: 1, overflowY: 'auto', background: '#525659', padding: '16px 0', position: 'relative' }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onClick={() => setNotePopup(null)}
       >
+        {/* Rubber-band erase selection overlay */}
+        {eraseDrag && (() => {
+          const scrollEl = scrollRef.current
+          const scrollTop = scrollEl ? scrollEl.scrollTop : 0
+          const scrollLeft = scrollEl ? scrollEl.scrollLeft : 0
+          const left = Math.min(eraseDrag.x1, eraseDrag.x2) - scrollLeft
+          const top = Math.min(eraseDrag.y1, eraseDrag.y2) - scrollTop
+          const width = Math.abs(eraseDrag.x2 - eraseDrag.x1)
+          const height = Math.abs(eraseDrag.y2 - eraseDrag.y1)
+          return (
+            <div style={{
+              position: 'fixed', left, top, width, height,
+              border: '2px dashed #ef4444', background: 'rgba(239,68,68,0.1)',
+              pointerEvents: 'none', zIndex: 100,
+            }} />
+          )
+        })()}
         {loading && (
           <div style={{ textAlign: 'center', color: '#ccc', paddingTop: 60, fontSize: 14 }}>加载中…</div>
         )}
