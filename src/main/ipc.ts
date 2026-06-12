@@ -175,10 +175,13 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   })
 
   // PDF file I/O for annotation layer
+  // Return a plain number[] so contextBridge serialization is lossless.
+  // Uint8Array/Buffer get re-wrapped as plain objects across the bridge.
   ipcMain.handle('fs:readFile', (_e, filePath: string) => {
-    return readFileSync(filePath)
+    const buf = readFileSync(filePath)
+    return Array.from(buf)
   })
-  ipcMain.handle('fs:writeFile', (_e, filePath: string, data: Uint8Array) => {
+  ipcMain.handle('fs:writeFile', (_e, filePath: string, data: number[]) => {
     writeFileSync(filePath, Buffer.from(data))
   })
   ipcMain.handle('pdfjs:workerPath', () => {

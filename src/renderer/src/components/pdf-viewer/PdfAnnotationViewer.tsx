@@ -44,8 +44,8 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     if (workerReadyRef.current) return
     workerReadyRef.current = true
     const workerPath = await window.refnest.fs.pdfjsWorkerPath()
-    const workerBytes = await window.refnest.fs.readFile(workerPath)
-    const blob = new Blob([workerBytes], { type: 'text/javascript' })
+    const workerRaw = await window.refnest.fs.readFile(workerPath)
+    const blob = new Blob([new Uint8Array(workerRaw)], { type: 'text/javascript' })
     pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob)
   }, [])
 
@@ -69,12 +69,10 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     async function load(): Promise<void> {
       try {
         await initWorker()
+        // IPC returns number[] (plain array — lossless across contextBridge)
         const raw = await window.refnest.fs.readFile(filePath)
         if (cancelled) return
-        // IPC returns a Buffer-like object; ensure plain Uint8Array
-        const bytes = raw instanceof Uint8Array
-          ? raw
-          : new Uint8Array((raw as unknown as { buffer: ArrayBuffer }).buffer)
+        const bytes = new Uint8Array(raw)
         await loadPdf(bytes)
         setLoading(false)
       } catch (e) {
@@ -145,8 +143,8 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
       const factory = new AnnotationFactory(pdfBytesRef.current)
       mutate(factory)
       const result = factory.write()
-      await window.refnest.fs.writeFile(filePath, result)
-      // Reload from the new bytes — this updates pdfDoc, which triggers renderAll
+      // writeFile expects number[] — Uint8Array must be converted for contextBridge
+      await window.refnest.fs.writeFile(filePath, Array.from(result))
       await loadPdf(result)
     } catch (err) {
       console.error('[PdfAnnotationViewer] annotation failed:', err)
