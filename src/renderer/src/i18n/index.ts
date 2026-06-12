@@ -2,6 +2,27 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
 const zh = {
+  settings: {
+    title: '设置',
+    storage: {
+      title: '文件存储路径',
+      label: '附件默认保存位置',
+      desc: '导入的 PDF 等附件将复制到此目录（留空则使用应用默认路径）',
+      placeholder: '使用默认路径（AppData）',
+      browse: '选择目录',
+      current: '当前路径',
+    },
+    language: {
+      title: '语言 / Language',
+      label: '界面语言',
+      zh: '中文',
+      en: 'English',
+    },
+    pdf2md: {
+      title: 'pdf2md 设置',
+    },
+    close: '关闭',
+  },
   toolbar: {
     search: '搜索文献...',
     addItem: '添加条目',
@@ -88,6 +109,27 @@ const zh = {
 }
 
 const en = {
+  settings: {
+    title: 'Settings',
+    storage: {
+      title: 'File Storage Path',
+      label: 'Default attachment location',
+      desc: 'Imported PDFs and attachments will be copied here (leave empty to use the default app path)',
+      placeholder: 'Use default path (AppData)',
+      browse: 'Browse',
+      current: 'Current path',
+    },
+    language: {
+      title: 'Language / 语言',
+      label: 'Interface language',
+      zh: '中文',
+      en: 'English',
+    },
+    pdf2md: {
+      title: 'pdf2md Settings',
+    },
+    close: 'Close',
+  },
   toolbar: {
     search: 'Search references...',
     addItem: 'Add Item',

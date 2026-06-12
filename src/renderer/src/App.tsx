@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MainLayout } from './components/layout/MainLayout'
-import { Pdf2mdDialog } from './components/tools/Pdf2mdDialog'
+import { SettingsDialog } from './components/tools/SettingsDialog'
 import { useItemStore } from './stores/itemStore'
 import { useStatusStore } from './stores/statusStore'
 import './i18n'
@@ -8,10 +9,10 @@ import './i18n'
 export default function App(): JSX.Element {
   const { loadItems, selectedId, setSelectedId } = useItemStore()
   const { setStatus } = useStatusStore()
-  const [showPdf2md, setShowPdf2md] = useState(false)
+  const { i18n } = useTranslation('common')
+  const [settingsTab, setSettingsTab] = useState<string | null>(null)
 
   useEffect(() => {
-    // Verify preload bridge is available
     if (!window.refnest) {
       console.error('[App] window.refnest is not defined — preload may have failed')
       return
@@ -19,11 +20,17 @@ export default function App(): JSX.Element {
     loadItems()
   }, [loadItems])
 
-  // Listen for menu: 工具 > pdf2md settings
+  // Menu → open settings on a specific tab
   useEffect(() => {
-    const cleanup = window.electron.ipcRenderer.on('tool:open-settings', () => setShowPdf2md(true))
-    return cleanup
+    window.refnest.onSettingsOpen((tab) => setSettingsTab(tab))
+    return () => window.refnest.offSettingsOpen()
   }, [])
+
+  // Menu → language change (menu radio clicked)
+  useEffect(() => {
+    window.refnest.onSetLocale((locale) => { i18n.changeLanguage(locale) })
+    return () => window.refnest.offSetLocale()
+  }, [i18n])
 
   // Global pdf2md status feed
   useEffect(() => {
@@ -54,7 +61,12 @@ export default function App(): JSX.Element {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <MainLayout />
-      {showPdf2md && <Pdf2mdDialog onClose={() => setShowPdf2md(false)} />}
+      {settingsTab !== null && (
+        <SettingsDialog
+          initialTab={settingsTab}
+          onClose={() => setSettingsTab(null)}
+        />
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { IpcMain, dialog, shell, BrowserWindow } from 'electron'
 import { convertPdfToMarkdown } from './mineruApi'
-import { saveSettings, isPdf2mdEnabled } from './pdf2mdService'
+import { saveSettings, isPdf2mdEnabled, getStoragePath, saveStoragePath } from './pdf2mdService'
 import {
   getAllItems, getTrashedItems, getItemById,
   getAllItemsWithTags, getItemsByCollectionWithTags,
@@ -123,10 +123,27 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   // Settings sync
   ipcMain.handle('settings:get', (_e, key: string) => {
     if (key === 'tool.pdf2md.enabled') return isPdf2mdEnabled()
+    if (key === 'storage.path') return getStoragePath()
     return null
   })
   ipcMain.handle('settings:set', (_e, key: string, value: unknown) => {
-    saveSettings({ [key]: value })
+    if (key === 'storage.path' && typeof value === 'string') {
+      saveStoragePath(value)
+    } else {
+      saveSettings({ [key]: value })
+    }
+  })
+
+  // Pick storage directory
+  ipcMain.handle('settings:pickStoragePath', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(win ?? BrowserWindow.getFocusedWindow()!, {
+      title: '选择文件存储目录',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (result.canceled) return null
+    saveStoragePath(result.filePaths[0])
+    return result.filePaths[0]
   })
 
   // Pick PDF file (used by settings dialog)

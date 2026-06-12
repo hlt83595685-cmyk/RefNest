@@ -21,9 +21,13 @@ type Pdf2mdProgressCb = (p: {
 
 let _pdf2mdStatusCb: Pdf2mdStatusCb | null = null
 let _pdf2mdProgressCb: Pdf2mdProgressCb | null = null
+let _settingsOpenCb: ((tab: string) => void) | null = null
+let _setLocaleCb: ((locale: string) => void) | null = null
 
 ipcRenderer.on('pdf2md:status', (_ev, e) => { _pdf2mdStatusCb?.(e) })
 ipcRenderer.on('tool:pdf2md:progress', (_ev, p) => { _pdf2mdProgressCb?.(p) })
+ipcRenderer.on('settings:open', (_ev, tab: string) => { _settingsOpenCb?.(tab) })
+ipcRenderer.on('settings:setLocale', (_ev, locale: string) => { _setLocaleCb?.(locale) })
 
 const refnestAPI = {
   items: {
@@ -77,10 +81,17 @@ const refnestAPI = {
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),
     set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),
+    pickStoragePath: () => ipcRenderer.invoke('settings:pickStoragePath'),
+    notifyLocale: (locale: string) => ipcRenderer.send('menu:setLocale', locale),
   },
   // pdf2md status (queue-level, single LED)
   onPdf2mdStatus: (cb: Pdf2mdStatusCb) => { _pdf2mdStatusCb = cb },
   offPdf2mdStatus: () => { _pdf2mdStatusCb = null },
+  // menu-driven settings panel
+  onSettingsOpen: (cb: (tab: string) => void) => { _settingsOpenCb = cb },
+  offSettingsOpen: () => { _settingsOpenCb = null },
+  onSetLocale: (cb: (locale: string) => void) => { _setLocaleCb = cb },
+  offSetLocale: () => { _setLocaleCb = null },
   // tools
   tools: {
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),

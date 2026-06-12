@@ -53,6 +53,15 @@ export function isPdf2mdEnabled(): boolean {
   return loadSettings()['tool.pdf2md.enabled'] !== false
 }
 
+export function getStoragePath(): string | null {
+  const v = loadSettings()['storage.path']
+  return typeof v === 'string' && v ? v : null
+}
+
+export function saveStoragePath(p: string): void {
+  saveSettings({ 'storage.path': p })
+}
+
 // ── Serial queue ──────────────────────────────────────────────────────────────
 
 interface QueueItem {

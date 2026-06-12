@@ -46,6 +46,8 @@ interface RefNestAPI {
   settings: {
     get: (key: string) => Promise<unknown>
     set: (key: string, value: unknown) => Promise<void>
+    pickStoragePath: () => Promise<string | null>
+    notifyLocale: (locale: string) => void
   }
   onPdf2mdStatus: (cb: (e: {
     filename: string
@@ -55,6 +57,10 @@ interface RefNestAPI {
     pending: number
   }) => void) => void
   offPdf2mdStatus: () => void
+  onSettingsOpen: (cb: (tab: string) => void) => void
+  offSettingsOpen: () => void
+  onSetLocale: (cb: (locale: string) => void) => void
+  offSetLocale: () => void
   import: {
     openDialog: () => Promise<ImportResult>
   }

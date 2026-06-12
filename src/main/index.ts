@@ -9,6 +9,69 @@ import { setMainWindowRef } from './pdf2mdService'
 
 let mainWindow: BrowserWindow | null = null
 
+const menuLabels: Record<string, Record<string, string>> = {
+  zh: {
+    settings:    '设置',
+    storagePath: '文件存储路径...',
+    pdf2md:      'pdf2md 设置...',
+    language:    '语言',
+    langZh:      '中文',
+    langEn:      'English',
+  },
+  en: {
+    settings:    'Settings',
+    storagePath: 'Storage Path...',
+    pdf2md:      'pdf2md Settings...',
+    language:    'Language',
+    langZh:      '中文',
+    langEn:      'English',
+  },
+}
+
+function buildMenu(locale: string): void {
+  const L = menuLabels[locale] ?? menuLabels['zh']
+  const menu = Menu.buildFromTemplate([
+    {
+      label: L.settings,
+      submenu: [
+        {
+          label: L.storagePath,
+          click: (): void => { mainWindow?.webContents.send('settings:open', 'storage') },
+        },
+        {
+          label: L.pdf2md,
+          click: (): void => { mainWindow?.webContents.send('settings:open', 'pdf2md') },
+        },
+        { type: 'separator' },
+        {
+          label: L.language,
+          submenu: [
+            {
+              label: L.langZh,
+              type: 'radio',
+              checked: locale === 'zh',
+              click: (): void => {
+                mainWindow?.webContents.send('settings:setLocale', 'zh')
+                buildMenu('zh')
+              },
+            },
+            {
+              label: L.langEn,
+              type: 'radio',
+              checked: locale === 'en',
+              click: (): void => {
+                mainWindow?.webContents.send('settings:setLocale', 'en')
+                buildMenu('en')
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ])
+  Menu.setApplicationMenu(menu)
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -77,20 +140,10 @@ app.whenReady().then(async () => {
   registerIpcHandlers(ipcMain)
   console.log('[main] IPC handlers registered')
 
-  const menu = Menu.buildFromTemplate([
-    {
-      label: '工具',
-      submenu: [
-        {
-          label: 'pdf2md',
-          click: (): void => {
-            mainWindow?.webContents.send('tool:open-settings')
-          },
-        },
-      ],
-    },
-  ])
-  Menu.setApplicationMenu(menu)
+  buildMenu('zh')
+
+  // Renderer can ask main to rebuild menu with a new locale
+  ipcMain.on('menu:setLocale', (_e, locale: string) => buildMenu(locale))
 
   createWindow()
 
