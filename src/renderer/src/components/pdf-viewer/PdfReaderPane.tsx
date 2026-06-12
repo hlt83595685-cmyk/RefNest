@@ -1,18 +1,12 @@
 import { useTranslation } from 'react-i18next'
 import { useItemStore } from '../../stores/itemStore'
+import { AnnotatedPdfViewer } from './AnnotatedPdfViewer'
 
 export function PdfReaderPane(): JSX.Element {
   const { t } = useTranslation('common')
-  const { viewerPath, viewerFilename, closePdf } = useItemStore()
+  const { viewerPath, viewerFilename, viewerItemId, closePdf } = useItemStore()
 
   if (!viewerPath) return <></>
-
-  const encoded = viewerPath
-    .replace(/\\/g, '/')
-    .split('/')
-    .map((seg) => encodeURIComponent(seg))
-    .join('/')
-  const src = `refnest-file://${encoded}`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
@@ -42,10 +36,7 @@ export function PdfReaderPane(): JSX.Element {
           ← {t('pdf.backToList')}
         </button>
 
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          flex: 1, minWidth: 0,
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>📄</span>
           <span style={{
             fontSize: 13, fontWeight: 500,
@@ -74,13 +65,18 @@ export function PdfReaderPane(): JSX.Element {
         </button>
       </div>
 
-      {/* PDF iframe */}
+      {/* PDF viewer with annotations */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <iframe
-          src={src}
-          style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-          title="PDF Viewer"
-        />
+        {viewerItemId != null ? (
+          <AnnotatedPdfViewer filePath={viewerPath} itemId={viewerItemId} />
+        ) : (
+          // fallback: no itemId (shouldn't normally happen)
+          <iframe
+            src={`refnest-file://${viewerPath.replace(/\\/g, '/').split('/').map((s) => encodeURIComponent(s)).join('/')}`}
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+            title="PDF Viewer"
+          />
+        )}
       </div>
     </div>
   )

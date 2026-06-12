@@ -4,6 +4,7 @@ import { useItemStore } from '../../stores/itemStore'
 import { MetadataTab } from './MetadataTab'
 import { TagsTab } from './TagsTab'
 import { AttachmentsTab } from './AttachmentsTab'
+import { NotesTab } from './NotesTab'
 import type { Item } from '../../../../shared/types'
 
 type Tab = 'metadata' | 'tags' | 'attachments' | 'notes'
@@ -66,11 +67,7 @@ export function DetailPane({ itemId }: { itemId: number }): JSX.Element {
         {tab === 'metadata'    && <MetadataTab item={item} onSaved={handleSaved} />}
         {tab === 'tags'        && <TagsTab itemId={item.id} />}
         {tab === 'attachments' && <AttachmentsTab itemId={item.id} />}
-        {tab === 'notes'       && (
-          <div style={{ padding: 20, color: 'var(--muted)', fontSize: 13 }}>
-            {t('detail.notesPlaceholder')}
-          </div>
-        )}
+        {tab === 'notes'       && <NotesTab itemId={item.id} />}
       </div>
     </div>
   )

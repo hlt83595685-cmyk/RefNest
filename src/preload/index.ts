@@ -80,6 +80,19 @@ const refnestAPI = {
   import: {
     openDialog: (collectionId?: number) => ipcRenderer.invoke('import:openDialog', collectionId),
   },
+  notes: {
+    getByItem: (itemId: number) => ipcRenderer.invoke('notes:getByItem', itemId),
+    create: (itemId: number, content: string) => ipcRenderer.invoke('notes:create', itemId, content),
+    update: (id: number, content: string) => ipcRenderer.invoke('notes:update', id, content),
+    delete: (id: number) => ipcRenderer.invoke('notes:delete', id),
+  },
+  annotations: {
+    getByItem: (itemId: number) => ipcRenderer.invoke('annotations:getByItem', itemId),
+    create: (itemId: number, page: number, type: string, color: string, text: string, comment: string, rects: string) =>
+      ipcRenderer.invoke('annotations:create', itemId, page, type, color, text, comment, rects),
+    updateComment: (id: number, comment: string) => ipcRenderer.invoke('annotations:updateComment', id, comment),
+    delete: (id: number) => ipcRenderer.invoke('annotations:delete', id),
+  },
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),
     set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),

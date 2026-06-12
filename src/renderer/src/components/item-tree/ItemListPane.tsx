@@ -174,7 +174,7 @@ export function ItemListPane(): JSX.Element {
       )
       if (!pdf) return
       const path = await window.refnest.attachments.getPath(pdf.id)
-      if (path) useItemStore.getState().openPdf(path, pdf.filename ?? 'document.pdf')
+      if (path) useItemStore.getState().openPdf(path, pdf.filename ?? 'document.pdf', item.id)
     } catch (err) {
       console.error('[ItemListPane] double-click open failed:', err)
     }

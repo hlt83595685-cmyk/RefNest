@@ -151,6 +151,23 @@ function runMigrations(db: Database.Database): void {
     `)
   }
 
+  if (current < 3) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS annotations (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+        page       INTEGER NOT NULL,
+        type       TEXT NOT NULL DEFAULT 'highlight',
+        color      TEXT NOT NULL DEFAULT '#FFD60A',
+        text       TEXT NOT NULL DEFAULT '',
+        comment    TEXT NOT NULL DEFAULT '',
+        rects      TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      INSERT INTO schema_version VALUES (3);
+    `)
+  }
+
   if (current < 2) {
     // Add Phase 1 columns to items (ALTER TABLE is safe for nullable columns)
     const existingCols = (db.pragma('table_info(items)') as { name: string }[]).map((c) => c.name)

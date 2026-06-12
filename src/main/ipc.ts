@@ -17,6 +17,10 @@ import { importPDF, extractKeywordsForItem } from './pdfImporter'
 import {
   getAttachmentsByItem, addAttachment, removeAttachment, getAttachmentPath
 } from './db/attachments'
+import { getNotesByItem, createNote, updateNote, deleteNote } from './db/notes'
+import {
+  getAnnotationsByItem, createAnnotation, updateAnnotationComment, deleteAnnotation
+} from './db/annotations'
 
 
 export function registerIpcHandlers(ipcMain: IpcMain): void {
@@ -133,6 +137,22 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
       saveSettings({ [key]: value })
     }
   })
+
+  // Notes
+  ipcMain.handle('notes:getByItem', (_e, itemId: number) => getNotesByItem(itemId))
+  ipcMain.handle('notes:create', (_e, itemId: number, content: string) => createNote(itemId, content))
+  ipcMain.handle('notes:update', (_e, id: number, content: string) => updateNote(id, content))
+  ipcMain.handle('notes:delete', (_e, id: number) => deleteNote(id))
+
+  // Annotations
+  ipcMain.handle('annotations:getByItem', (_e, itemId: number) => getAnnotationsByItem(itemId))
+  ipcMain.handle('annotations:create', (
+    _e, itemId: number, page: number, type: string,
+    color: string, text: string, comment: string, rects: string
+  ) => createAnnotation(itemId, page, type as 'highlight' | 'note', color, text, comment, rects))
+  ipcMain.handle('annotations:updateComment', (_e, id: number, comment: string) =>
+    updateAnnotationComment(id, comment))
+  ipcMain.handle('annotations:delete', (_e, id: number) => deleteAnnotation(id))
 
   // Manual pdf2md from context menu
   ipcMain.handle('pdf2md:convertItem', (_e, itemId: number) => {
