@@ -1,24 +1,29 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import { TextLayer } from 'pdfjs-dist'
-import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString } from 'pdf-lib'
+import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString, PDFRef } from 'pdf-lib'
 import 'pdfjs-dist/web/pdf_viewer.css'
 
-type Tool = 'none' | 'highlight' | 'note'
+type Tool = 'none' | 'highlight' | 'note' | 'erase'
 
-interface Props {
-  filePath: string
-}
+// Highlight colors: [cssHex for canvas, [r,g,b] 0-1 for PDF]
+const HIGHLIGHT_COLORS: { label: string; css: string; pdf: [number, number, number] }[] = [
+  { label: '黄',   css: '#FFE014', pdf: [1,    0.88, 0.08] },
+  { label: '绿',   css: '#A8F0A0', pdf: [0.66, 0.94, 0.63] },
+  { label: '青',   css: '#80E8FF', pdf: [0.50, 0.91, 1.00] },
+  { label: '粉',   css: '#FFB3D9', pdf: [1.00, 0.70, 0.85] },
+  { label: '橙',   css: '#FFD080', pdf: [1.00, 0.82, 0.50] },
+]
 
-// A highlight stored in React state for canvas overlay drawing
+interface Props { filePath: string }
+
 interface HighlightRect {
   id: string
   pageNum: number
-  // PDF-space coordinates
   pdfRect: [number, number, number, number]
+  color: string  // css hex
 }
 
-// A sticky note stored in React state for DOM overlay
 interface NoteAnnot {
   id: string
   pageNum: number
@@ -28,72 +33,13 @@ interface NoteAnnot {
 }
 
 interface PendingNote {
-  screenX: number
-  screenY: number
-  pdfX: number
-  pdfY: number
-  pageNum: number
+  screenX: number; screenY: number
+  pdfX: number; pdfY: number; pageNum: number
 }
 
-// ── PDF write helpers ────────────────────────────────────────────────────────
+// ── PDF helpers ───────────────────────────────────────────────────────────────
 
-async function addHighlightToPdf(
-  bytes: Uint8Array,
-  pageIndex: number,
-  rect: [number, number, number, number],
-  id: string
-): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(bytes)
-  const page = doc.getPage(pageIndex)
-  const [x1, y1, x2, y2] = rect
-  const quadPoints = [x1, y2, x2, y2, x1, y1, x2, y1]
-
-  const annot = doc.context.obj({
-    Type: PDFName.of('Annot'),
-    Subtype: PDFName.of('Highlight'),
-    Rect: doc.context.obj([x1, y1, x2, y2]),
-    QuadPoints: doc.context.obj(quadPoints),
-    C: doc.context.obj([1, 0.87, 0]),
-    CA: PDFNumber.of(0.5),
-    F: PDFNumber.of(4),
-    NM: PDFString.of(id),
-    T: PDFString.of('RefNest'),
-    Contents: PDFString.of(''),
-  })
-  const ref = doc.context.register(annot)
-  pushAnnotRef(doc, page, ref)
-  return doc.save()
-}
-
-async function addNoteToPdf(
-  bytes: Uint8Array,
-  pageIndex: number,
-  x: number,
-  y: number,
-  contents: string,
-  id: string
-): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(bytes)
-  const page = doc.getPage(pageIndex)
-
-  const annot = doc.context.obj({
-    Type: PDFName.of('Annot'),
-    Subtype: PDFName.of('Text'),
-    Rect: doc.context.obj([x, y, x + 20, y + 20]),
-    Contents: PDFString.of(contents),
-    T: PDFString.of('RefNest'),
-    NM: PDFString.of(id),
-    F: PDFNumber.of(4),
-    Open: PDFName.of('false'),
-    Name: PDFName.of('Note'),
-    C: doc.context.obj([1, 0.87, 0]),
-  })
-  const ref = doc.context.register(annot)
-  pushAnnotRef(doc, page, ref)
-  return doc.save()
-}
-
-function pushAnnotRef(doc: PDFDocument, page: ReturnType<PDFDocument['getPage']>, ref: import('pdf-lib').PDFRef): void {
+function pushAnnotRef(doc: PDFDocument, page: ReturnType<PDFDocument['getPage']>, ref: PDFRef): void {
   const existing = page.node.get(PDFName.of('Annots'))
   let arr: PDFArray
   if (existing instanceof PDFArray) {
@@ -108,13 +54,111 @@ function pushAnnotRef(doc: PDFDocument, page: ReturnType<PDFDocument['getPage']>
   page.node.set(PDFName.of('Annots'), arr)
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+async function addHighlightToPdf(
+  bytes: Uint8Array, pageIndex: number,
+  rect: [number, number, number, number],
+  id: string, pdfColor: [number, number, number]
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes)
+  const page = doc.getPage(pageIndex)
+  const [x1, y1, x2, y2] = rect
+  const annot = doc.context.obj({
+    Type: PDFName.of('Annot'), Subtype: PDFName.of('Highlight'),
+    Rect: doc.context.obj([x1, y1, x2, y2]),
+    QuadPoints: doc.context.obj([x1, y2, x2, y2, x1, y1, x2, y1]),
+    C: doc.context.obj(pdfColor),
+    CA: PDFNumber.of(0.5), F: PDFNumber.of(4),
+    NM: PDFString.of(id), T: PDFString.of('RefNest'), Contents: PDFString.of(''),
+  })
+  pushAnnotRef(doc, page, doc.context.register(annot))
+  return doc.save()
+}
+
+async function addNoteToPdf(
+  bytes: Uint8Array, pageIndex: number,
+  x: number, y: number, contents: string, id: string
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes)
+  const page = doc.getPage(pageIndex)
+  const annot = doc.context.obj({
+    Type: PDFName.of('Annot'), Subtype: PDFName.of('Text'),
+    Rect: doc.context.obj([x, y, x + 20, y + 20]),
+    Contents: PDFString.of(contents),
+    T: PDFString.of('RefNest'), NM: PDFString.of(id),
+    F: PDFNumber.of(4), Open: PDFName.of('false'),
+    Name: PDFName.of('Note'), C: doc.context.obj([1, 0.87, 0]),
+  })
+  pushAnnotRef(doc, page, doc.context.register(annot))
+  return doc.save()
+}
+
+async function updateNoteToPdf(
+  bytes: Uint8Array, id: string, newContents: string
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes)
+  for (const page of doc.getPages()) {
+    const annotsRef = page.node.get(PDFName.of('Annots'))
+    if (!annotsRef) continue
+    const arr = doc.context.lookup(annotsRef instanceof PDFArray ? annotsRef : annotsRef)
+    if (!(arr instanceof PDFArray)) continue
+    for (let i = 0; i < arr.size(); i++) {
+      const ref = arr.get(i)
+      const dict = doc.context.lookup(ref)
+      if (!dict || typeof (dict as any).get !== 'function') continue
+      const nm = (dict as any).get(PDFName.of('NM'))
+      if (nm && (nm.toString() === `(${id})` || nm.decodeText?.() === id || String(nm).includes(id))) {
+        ;(dict as any).set(PDFName.of('Contents'), PDFString.of(newContents))
+      }
+    }
+  }
+  return doc.save()
+}
+
+async function removeAnnotsFromPdf(bytes: Uint8Array, ids: string[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes)
+  for (const page of doc.getPages()) {
+    const annotsRef = page.node.get(PDFName.of('Annots'))
+    if (!annotsRef) continue
+    const resolved = doc.context.lookup(annotsRef)
+    if (!(resolved instanceof PDFArray)) continue
+
+    const keep: PDFRef[] = []
+    for (let i = 0; i < resolved.size(); i++) {
+      const ref = resolved.get(i) as PDFRef
+      const dict = doc.context.lookup(ref)
+      if (!dict || typeof (dict as any).get !== 'function') { keep.push(ref); continue }
+      const nm = (dict as any).get(PDFName.of('NM'))
+      // NM is stored as PDFString: its raw value includes parens, or use asString()
+      const nmStr: string = nm
+        ? (typeof nm.asString === 'function' ? nm.asString() : nm.decodeText?.() ?? String(nm))
+        : ''
+      if (ids.includes(nmStr)) {
+        doc.context.delete(ref)  // free the object
+      } else {
+        keep.push(ref)
+      }
+    }
+
+    // Rebuild the array with only kept refs
+    const newArr = doc.context.obj(keep)
+    if (resolved === annotsRef) {
+      page.node.set(PDFName.of('Annots'), newArr)
+    } else {
+      // annotsRef is an indirect ref — update in place
+      doc.context.assign(annotsRef as PDFRef, newArr)
+    }
+  }
+  return doc.save()
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [numPages, setNumPages] = useState(0)
   const [scale, setScale] = useState(1.5)
   const [tool, setTool] = useState<Tool>('none')
+  const [hlColorIdx, setHlColorIdx] = useState(0)  // index into HIGHLIGHT_COLORS
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -123,7 +167,9 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const [notes, setNotes] = useState<NoteAnnot[]>([])
   const [pendingNote, setPendingNote] = useState<PendingNote | null>(null)
   const [noteText, setNoteText] = useState('')
-  const [openNoteId, setOpenNoteId] = useState<string | null>(null)
+  // note popup state: null = closed, id = view mode, id+'_edit' = edit mode
+  const [notePopup, setNotePopup] = useState<{ id: string; editing: boolean } | null>(null)
+  const [editText, setEditText] = useState('')
 
   const workerReadyRef = useRef(false)
   const pdfBytesRef = useRef<Uint8Array | null>(null)
@@ -131,43 +177,49 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const viewportsRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map())
   const scaleRef = useRef(scale)
   useEffect(() => { scaleRef.current = scale }, [scale])
+  const highlightsRef = useRef<HighlightRect[]>([])
+  useEffect(() => { highlightsRef.current = highlights }, [highlights])
+  const toolRef = useRef<Tool>('none')
+  useEffect(() => { toolRef.current = tool }, [tool])
 
-  // ── helpers ──
+  // ── worker ──
 
   const initWorker = useCallback(async () => {
     if (workerReadyRef.current) return
     workerReadyRef.current = true
-    const workerPath = await window.refnest.fs.pdfjsWorkerPath()
-    const raw = await window.refnest.fs.readFile(workerPath)
-    const blob = new Blob([new Uint8Array(raw)], { type: 'text/javascript' })
-    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob)
+    const path = await window.refnest.fs.pdfjsWorkerPath()
+    const raw = await window.refnest.fs.readFile(path)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
+      new Blob([new Uint8Array(raw)], { type: 'text/javascript' })
+    )
   }, [])
 
-  // Draw highlight overlays on canvas via 2D context (no re-render needed)
-  const drawHighlightsOnPage = useCallback((pageNum: number, hl: HighlightRect[], vp: pdfjsLib.PageViewport) => {
+  // ── canvas drawing ──
+
+  const drawHighlightsOnPage = useCallback((
+    pageNum: number, hls: HighlightRect[], vp: pdfjsLib.PageViewport
+  ) => {
     const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
     ctx.save()
     ctx.globalCompositeOperation = 'multiply'
-    ctx.globalAlpha = 0.4
-    ctx.fillStyle = '#FFE014'
-    for (const h of hl.filter(h => h.pageNum === pageNum)) {
+    ctx.globalAlpha = 0.45
+    for (const h of hls.filter(h => h.pageNum === pageNum)) {
       const [x1, y1, x2, y2] = h.pdfRect
-      // PDF coords: origin bottom-left; canvas: origin top-left
       const [sx1, sy1] = vp.convertToViewportPoint(x1, y2)
       const [sx2, sy2] = vp.convertToViewportPoint(x2, y1)
+      ctx.fillStyle = h.color
       ctx.fillRect(sx1, sy1, sx2 - sx1, sy2 - sy1)
     }
     ctx.restore()
   }, [])
 
-  // Render one page: canvas (PDF content only, no annotation layer) + TextLayer
+  // ── page render ──
+
   const renderPage = useCallback(async (
-    doc: pdfjsLib.PDFDocumentProxy,
-    pageNum: number,
-    currentScale: number,
-    currentHighlights: HighlightRect[]
+    doc: pdfjsLib.PDFDocumentProxy, pageNum: number,
+    currentScale: number, currentHighlights: HighlightRect[]
   ) => {
     const page = await doc.getPage(pageNum)
     const viewport = page.getViewport({ scale: currentScale })
@@ -177,18 +229,9 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     if (!canvas) return
     canvas.width = viewport.width
     canvas.height = viewport.height
-
-    // Render PDF content without annotation layer (we draw highlights manually)
-    await page.render({
-      canvasContext: canvas.getContext('2d')!,
-      viewport,
-      annotationMode: 0, // DISABLE — we overlay highlights ourselves
-    }).promise
-
-    // Draw stored highlights on top
+    await page.render({ canvasContext: canvas.getContext('2d')!, viewport, annotationMode: 0 }).promise
     drawHighlightsOnPage(pageNum, currentHighlights, viewport)
 
-    // TextLayer
     const wrapper = document.getElementById(`pdf-page-${pageNum}`)
     if (!wrapper) return
     wrapper.querySelector('.textLayer')?.remove()
@@ -197,15 +240,21 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     textDiv.style.width = `${viewport.width}px`
     textDiv.style.height = `${viewport.height}px`
     wrapper.appendChild(textDiv)
-    const tl = new TextLayer({
+    await new TextLayer({
       textContentSource: await page.getTextContent(),
-      container: textDiv,
-      viewport,
-    })
-    await tl.render()
+      container: textDiv, viewport,
+    }).render()
   }, [drawHighlightsOnPage])
 
-  // Load existing annotations from PDF into state
+  // Re-render one page using current pdfDocRef (after erase)
+  const rerenderPage = useCallback(async (pageNum: number, hls: HighlightRect[]) => {
+    const doc = pdfDocRef.current
+    if (!doc) return
+    await renderPage(doc, pageNum, scaleRef.current, hls)
+  }, [renderPage])
+
+  // ── annotation loading ──
+
   const loadAnnotations = useCallback(async (doc: pdfjsLib.PDFDocumentProxy) => {
     const hls: HighlightRect[] = []
     const nts: NoteAnnot[] = []
@@ -214,15 +263,21 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
       const annots = await page.getAnnotations()
       for (const a of annots) {
         if (a.subtype === 'Highlight' && a.rect) {
-          hls.push({ id: a.id ?? `hl-${i}-${hls.length}`, pageNum: i, pdfRect: a.rect })
+          // Try to match the saved CSS color from the PDF color array
+          const c = a.color   // {r,g,b} 0-255 from pdfjs
+          let cssColor = '#FFE014'
+          if (c) {
+            const r = Math.round(c.r), g = Math.round(c.g), b = Math.round(c.b)
+            const match = HIGHLIGHT_COLORS.find(hc => {
+              const [pr, pg, pb] = hc.pdf
+              return Math.abs(pr * 255 - r) < 10 && Math.abs(pg * 255 - g) < 10 && Math.abs(pb * 255 - b) < 10
+            })
+            if (match) cssColor = match.css
+          }
+          hls.push({ id: a.id ?? `hl-${i}-${hls.length}`, pageNum: i, pdfRect: a.rect, color: cssColor })
         } else if (a.subtype === 'Text' && a.rect) {
-          nts.push({
-            id: a.id ?? `note-${i}-${nts.length}`,
-            pageNum: i,
-            pdfX: a.rect[0],
-            pdfY: a.rect[1],
-            contents: a.contents ?? '',
-          })
+          nts.push({ id: a.id ?? `note-${i}-${nts.length}`, pageNum: i,
+            pdfX: a.rect[0], pdfY: a.rect[1], contents: a.contents ?? '' })
         }
       }
     }
@@ -231,11 +286,11 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     return hls
   }, [])
 
-  // Initial load
+  // ── initial load ──
+
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     async function load(): Promise<void> {
       try {
         await initWorker()
@@ -262,9 +317,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     return () => { cancelled = true }
   }, [filePath, initWorker, loadAnnotations, renderPage])
 
-  // Re-render all pages on scale change (uses current highlights from state via ref)
-  const highlightsRef = useRef<HighlightRect[]>([])
-  useEffect(() => { highlightsRef.current = highlights }, [highlights])
+  // ── scale change → full re-render ──
 
   useEffect(() => {
     const doc = pdfDocRef.current
@@ -281,7 +334,16 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     return () => { cancelled = true }
   }, [scale, loading, renderPage])
 
-  // ── event handlers ──
+  // ── silent PDF doc refresh (after writing bytes) ──
+
+  const refreshPdfDoc = useCallback(async (newBytes: Uint8Array) => {
+    pdfBytesRef.current = newBytes
+    const newDoc = await pdfjsLib.getDocument({ data: newBytes.slice() }).promise
+    pdfDocRef.current?.destroy()
+    pdfDocRef.current = newDoc
+  }, [])
+
+  // ── highlight ──
 
   function pageNumOfNode(node: Node | null): number | null {
     let el = node instanceof Element ? node : node?.parentElement
@@ -294,18 +356,18 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   }
 
   function selectionToPdfRect(
-    viewport: pdfjsLib.PageViewport,
-    canvas: HTMLCanvasElement,
-    selRect: DOMRect
+    vp: pdfjsLib.PageViewport, canvas: HTMLCanvasElement, selRect: DOMRect
   ): [number, number, number, number] {
     const cr = canvas.getBoundingClientRect()
-    const [x1p, y1p] = viewport.convertToPdfPoint(selRect.left - cr.left, selRect.top - cr.top)
-    const [x2p, y2p] = viewport.convertToPdfPoint(selRect.right - cr.left, selRect.bottom - cr.top)
+    const [x1p, y1p] = vp.convertToPdfPoint(selRect.left - cr.left, selRect.top - cr.top)
+    const [x2p, y2p] = vp.convertToPdfPoint(selRect.right - cr.left, selRect.bottom - cr.top)
     return [Math.min(x1p, x2p), Math.min(y1p, y2p), Math.max(x1p, x2p), Math.max(y1p, y2p)]
   }
 
   const handleMouseUp = useCallback(async () => {
-    if (tool !== 'highlight') return
+    const t = toolRef.current
+    if (t !== 'highlight' && t !== 'erase') return
+
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
     const range = sel.getRangeAt(0)
@@ -320,35 +382,51 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     const pdfRect = selectionToPdfRect(viewport, canvas, selRect)
     sel.removeAllRanges()
 
-    const id = `hl-${Date.now()}`
-    const newHl: HighlightRect = { id, pageNum, pdfRect }
+    if (t === 'highlight') {
+      const col = HIGHLIGHT_COLORS[hlColorIdx]
+      const id = `hl-${Date.now()}`
+      const newHl: HighlightRect = { id, pageNum, pdfRect, color: col.css }
+      // Instant canvas draw
+      drawHighlightsOnPage(pageNum, [newHl], viewport)
+      setHighlights(prev => [...prev, newHl])
+      // Background PDF write
+      setSaving(true)
+      try {
+        const newBytes = await addHighlightToPdf(pdfBytesRef.current, pageNum - 1, pdfRect, id, col.pdf)
+        await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
+        await refreshPdfDoc(newBytes)
+      } catch (err) { console.error('[highlight save]', err) }
+      finally { setSaving(false) }
 
-    // 1. Immediately draw on canvas — no re-render, no flicker
-    drawHighlightsOnPage(pageNum, [newHl], viewport)
-    setHighlights(prev => [...prev, newHl])
-
-    // 2. Persist to PDF in background
-    setSaving(true)
-    try {
-      const newBytes = await addHighlightToPdf(pdfBytesRef.current, pageNum - 1, pdfRect, id)
-      await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
-      pdfBytesRef.current = newBytes
-      // Update pdfDoc reference silently (for next annotation parse), no re-render
-      const newDoc = await pdfjsLib.getDocument({ data: newBytes.slice() }).promise
-      pdfDocRef.current?.destroy()
-      pdfDocRef.current = newDoc
-    } catch (err) {
-      console.error('[PdfAnnotationViewer] highlight save failed:', err)
-    } finally {
-      setSaving(false)
+    } else if (t === 'erase') {
+      // Find all highlights whose rect overlaps the selection rect
+      const [sx1, sy1, sx2, sy2] = pdfRect
+      const toRemove = highlightsRef.current.filter(h => {
+        if (h.pageNum !== pageNum) return false
+        const [hx1, hy1, hx2, hy2] = h.pdfRect
+        return sx1 < hx2 && sx2 > hx1 && sy1 < hy2 && sy2 > hy1
+      })
+      if (toRemove.length === 0) return
+      const ids = toRemove.map(h => h.id)
+      const nextHls = highlightsRef.current.filter(h => !ids.includes(h.id))
+      setHighlights(nextHls)
+      // Re-render the page to clear removed highlights (need full canvas clear)
+      setSaving(true)
+      try {
+        const newBytes = await removeAnnotsFromPdf(pdfBytesRef.current, ids)
+        await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
+        await refreshPdfDoc(newBytes)
+        await rerenderPage(pageNum, nextHls)
+      } catch (err) { console.error('[erase save]', err) }
+      finally { setSaving(false) }
     }
-  }, [tool, filePath, drawHighlightsOnPage])
+  }, [hlColorIdx, filePath, drawHighlightsOnPage, refreshPdfDoc, rerenderPage])
+
+  // ── note placement ──
 
   const handlePageClick = useCallback((e: React.MouseEvent, pageNum: number) => {
-    if (tool !== 'note') return
-    // Don't open note placement if clicking on an existing note icon
-    const target = e.target as HTMLElement
-    if (target.closest('[data-note-icon]')) return
+    if (toolRef.current !== 'note') return
+    if ((e.target as HTMLElement).closest('[data-note-icon]')) return
     const viewport = viewportsRef.current.get(pageNum)
     const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
     if (!viewport || !canvas) return
@@ -356,78 +434,116 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     const [pdfX, pdfY] = viewport.convertToPdfPoint(e.clientX - cr.left, e.clientY - cr.top)
     setPendingNote({ screenX: e.clientX, screenY: e.clientY, pdfX, pdfY, pageNum })
     setNoteText('')
-  }, [tool])
+  }, [])
 
   const confirmNote = useCallback(async () => {
     if (!pendingNote || !pdfBytesRef.current) return
     const { pageNum, pdfX, pdfY } = pendingNote
     setPendingNote(null)
-
     const id = `note-${Date.now()}`
-    const newNote: NoteAnnot = { id, pageNum, pdfX, pdfY, contents: noteText }
-
-    // 1. Add to state immediately — icon appears without waiting for disk write
-    setNotes(prev => [...prev, newNote])
-
-    // 2. Persist to PDF
+    setNotes(prev => [...prev, { id, pageNum, pdfX, pdfY, contents: noteText }])
     setSaving(true)
     try {
       const newBytes = await addNoteToPdf(pdfBytesRef.current, pageNum - 1, pdfX, pdfY, noteText, id)
       await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
-      pdfBytesRef.current = newBytes
-      const newDoc = await pdfjsLib.getDocument({ data: newBytes.slice() }).promise
-      pdfDocRef.current?.destroy()
-      pdfDocRef.current = newDoc
-    } catch (err) {
-      console.error('[PdfAnnotationViewer] note save failed:', err)
-    } finally {
-      setSaving(false)
-    }
-  }, [pendingNote, noteText, filePath])
+      await refreshPdfDoc(newBytes)
+    } catch (err) { console.error('[note save]', err) }
+    finally { setSaving(false) }
+  }, [pendingNote, noteText, filePath, refreshPdfDoc])
 
-  // Convert PDF coordinates to canvas screen position for note icon placement
+  // ── note edit / delete ──
+
+  const saveNoteEdit = useCallback(async (id: string) => {
+    if (!pdfBytesRef.current) return
+    setNotes(prev => prev.map(n => n.id === id ? { ...n, contents: editText } : n))
+    setNotePopup(null)
+    setSaving(true)
+    try {
+      const newBytes = await updateNoteToPdf(pdfBytesRef.current, id, editText)
+      await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
+      await refreshPdfDoc(newBytes)
+    } catch (err) { console.error('[note edit]', err) }
+    finally { setSaving(false) }
+  }, [editText, filePath, refreshPdfDoc])
+
+  const deleteNote = useCallback(async (id: string) => {
+    if (!pdfBytesRef.current) return
+    setNotes(prev => prev.filter(n => n.id !== id))
+    setNotePopup(null)
+    setSaving(true)
+    try {
+      const newBytes = await removeAnnotsFromPdf(pdfBytesRef.current, [id])
+      await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
+      await refreshPdfDoc(newBytes)
+    } catch (err) { console.error('[note delete]', err) }
+    finally { setSaving(false) }
+  }, [filePath, refreshPdfDoc])
+
+  // ── note icon positions ──
+
   function noteIconPos(note: NoteAnnot): { left: number; top: number } | null {
-    const viewport = viewportsRef.current.get(note.pageNum)
-    if (!viewport) return null
+    const vp = viewportsRef.current.get(note.pageNum)
+    if (!vp) return null
     const canvas = document.getElementById(`pdf-canvas-${note.pageNum}`) as HTMLCanvasElement | null
     if (!canvas) return null
-    const cr = canvas.getBoundingClientRect()
     const wrapper = document.getElementById(`pdf-page-${note.pageNum}`)
     if (!wrapper) return null
+    const [sx, sy] = vp.convertToViewportPoint(note.pdfX, note.pdfY)
+    const cr = canvas.getBoundingClientRect()
     const wr = wrapper.getBoundingClientRect()
-    const [sx, sy] = viewport.convertToViewportPoint(note.pdfX, note.pdfY)
-    // Position relative to wrapper (which is position:relative)
     return { left: sx + (cr.left - wr.left), top: sy + (cr.top - wr.top) }
   }
 
   // ── styles ──
 
+  const isActive = (t: Tool) => tool === t
   const btnStyle = (t: Tool): React.CSSProperties => ({
     padding: '4px 10px', borderRadius: 6,
     border: '1px solid var(--border)',
-    background: tool === t ? '#2563eb' : 'var(--surface)',
-    color: tool === t ? '#fff' : 'var(--foreground-2)',
+    background: isActive(t) ? '#2563eb' : 'var(--surface)',
+    color: isActive(t) ? '#fff' : 'var(--foreground-2)',
     fontSize: 12, fontWeight: 500, cursor: 'pointer', userSelect: 'none',
   })
 
-  if (error) return (
-    <div style={{ padding: 32, color: 'red', fontSize: 13 }}>PDF 加载失败：{error}</div>
-  )
+  if (error) return <div style={{ padding: 32, color: 'red', fontSize: 13 }}>PDF 加载失败：{error}</div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Toolbar */}
+
+      {/* ── Toolbar ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '0 12px', height: 40, flexShrink: 0,
-        background: 'rgba(242,242,247,0.9)',
-        borderBottom: '1px solid var(--separator)',
+        display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+        padding: '0 12px', minHeight: 40, flexShrink: 0,
+        background: 'rgba(242,242,247,0.9)', borderBottom: '1px solid var(--separator)',
         userSelect: 'none',
       }}>
-        <span style={{ fontSize: 12, color: 'var(--muted)', marginRight: 2 }}>注释：</span>
+        <span style={{ fontSize: 12, color: 'var(--muted)', marginRight: 2 }}>工具：</span>
         <button style={btnStyle('none')}      onClick={() => setTool('none')}>选择</button>
         <button style={btnStyle('highlight')} onClick={() => setTool('highlight')}>🖊 高亮</button>
         <button style={btnStyle('note')}      onClick={() => setTool('note')}>📌 便签</button>
+        <button style={btnStyle('erase')}     onClick={() => setTool('erase')}>🧹 橡皮擦</button>
+
+        {/* Color picker — only shown when highlight tool active */}
+        {tool === 'highlight' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginLeft: 4 }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>颜色：</span>
+            {HIGHLIGHT_COLORS.map((c, i) => (
+              <div
+                key={c.label}
+                onClick={() => setHlColorIdx(i)}
+                title={c.label}
+                style={{
+                  width: 18, height: 18, borderRadius: '50%',
+                  background: c.css, cursor: 'pointer',
+                  border: hlColorIdx === i ? '2.5px solid #2563eb' : '1.5px solid rgba(0,0,0,0.2)',
+                  boxSizing: 'border-box',
+                  flexShrink: 0,
+                }}
+              />
+            ))}
+          </div>
+        )}
+
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>缩放：</span>
         <button style={{ ...btnStyle('none'), padding: '4px 8px' }}
@@ -438,11 +554,12 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
         {saving && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>保存中…</span>}
       </div>
 
-      {/* Scroll area */}
+      {/* ── Scroll area ── */}
       <div
         ref={scrollRef}
         style={{ flex: 1, overflowY: 'auto', background: '#525659', padding: '16px 0' }}
         onMouseUp={handleMouseUp}
+        onClick={() => setNotePopup(null)}
       >
         {loading && (
           <div style={{ textAlign: 'center', color: '#ccc', paddingTop: 60, fontSize: 14 }}>加载中…</div>
@@ -459,58 +576,88 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
               <canvas
                 id={`pdf-canvas-${pageNum}`}
                 style={{
-                  display: 'block',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-                  cursor: tool === 'note' ? 'crosshair' : 'default',
+                  display: 'block', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                  cursor: tool === 'note' ? 'crosshair' : tool === 'erase' ? 'cell' : 'default',
                 }}
               />
-              {/* Note icons overlaid on each page */}
+
+              {/* Note icons */}
               {notes.filter(n => n.pageNum === pageNum).map(note => {
                 const pos = noteIconPos(note)
                 if (!pos) return null
-                const isOpen = openNoteId === note.id
+                const popup = notePopup?.id === note.id ? notePopup : null
                 return (
                   <div key={note.id} style={{ position: 'absolute', left: pos.left, top: pos.top, zIndex: 10 }}>
-                    {/* Icon */}
                     <div
                       data-note-icon="1"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setOpenNoteId(isOpen ? null : note.id)
+                        if (popup) { setNotePopup(null) }
+                        else { setNotePopup({ id: note.id, editing: false }); setEditText(note.contents) }
                       }}
                       style={{
-                        width: 22, height: 22,
-                        background: '#FFD700',
-                        border: '1.5px solid #B8960C',
-                        borderRadius: '4px 4px 0 4px',
-                        cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 13,
+                        width: 22, height: 22, background: '#FFD700',
+                        border: '1.5px solid #B8960C', borderRadius: '4px 4px 0 4px',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: 13,
                         boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
                       }}
                       title={note.contents}
-                    >
-                      📝
-                    </div>
-                    {/* Popup */}
-                    {isOpen && (
+                    >📝</div>
+
+                    {popup && (
                       <div
                         onClick={e => e.stopPropagation()}
                         style={{
-                          position: 'absolute', left: 24, top: 0,
-                          minWidth: 200, maxWidth: 280,
-                          background: '#FFFDE7',
-                          border: '1px solid #B8960C',
-                          borderRadius: '0 6px 6px 6px',
-                          padding: '8px 10px',
-                          fontSize: 12, lineHeight: 1.5,
+                          position: 'absolute', left: 26, top: 0,
+                          minWidth: 210, maxWidth: 300, zIndex: 20,
+                          background: '#FFFDE7', border: '1px solid #B8960C',
+                          borderRadius: '0 6px 6px 6px', padding: '8px 10px',
                           boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                          zIndex: 20,
+                          display: 'flex', flexDirection: 'column', gap: 6,
                         }}
                       >
-                        <div style={{ fontWeight: 600, marginBottom: 4, color: '#7a6000' }}>便签</div>
-                        <div>{note.contents || <span style={{ color: '#aaa' }}>（无内容）</span>}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#7a6000' }}>便签</span>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            {!popup.editing && (
+                              <button
+                                onClick={() => setNotePopup({ id: note.id, editing: true })}
+                                style={{ fontSize: 11, padding: '1px 7px', borderRadius: 4, border: '1px solid #B8960C', background: '#fff', cursor: 'pointer' }}
+                              >编辑</button>
+                            )}
+                            <button
+                              onClick={() => deleteNote(note.id)}
+                              style={{ fontSize: 11, padding: '1px 7px', borderRadius: 4, border: '1px solid #e55', background: '#fff', color: '#c00', cursor: 'pointer' }}
+                            >删除</button>
+                          </div>
+                        </div>
+
+                        {popup.editing ? (
+                          <>
+                            <textarea
+                              autoFocus
+                              value={editText}
+                              onChange={e => setEditText(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveNoteEdit(note.id) }}
+                              rows={3}
+                              style={{
+                                resize: 'none', fontSize: 12, padding: '3px 5px',
+                                border: '1px solid #B8960C', borderRadius: 4, background: '#fff',
+                              }}
+                            />
+                            <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
+                              <button onClick={() => setNotePopup({ id: note.id, editing: false })}
+                                style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>取消</button>
+                              <button onClick={() => saveNoteEdit(note.id)}
+                                style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer' }}>保存</button>
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: note.contents ? '#333' : '#aaa' }}>
+                            {note.contents || '（无内容）'}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -521,39 +668,29 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
         ))}
       </div>
 
-      {/* Note input popup */}
+      {/* ── New note popup ── */}
       {pendingNote && (
         <div style={{
           position: 'fixed',
           left: Math.min(pendingNote.screenX + 12, window.innerWidth - 260),
-          top: Math.min(pendingNote.screenY + 12, window.innerHeight - 170),
-          zIndex: 1000,
-          background: '#FFFDE7',
-          border: '1px solid #B8960C',
-          borderRadius: 8, padding: 12,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+          top: Math.min(pendingNote.screenY + 12, window.innerHeight - 180),
+          zIndex: 1000, background: '#FFFDE7', border: '1px solid #B8960C',
+          borderRadius: 8, padding: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
           display: 'flex', flexDirection: 'column', gap: 8, minWidth: 230,
         }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: '#7a6000' }}>添加便签</span>
           <textarea
-            autoFocus
-            value={noteText}
+            autoFocus value={noteText}
             onChange={e => setNoteText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) confirmNote() }}
             rows={3}
-            style={{
-              resize: 'none', fontSize: 13, padding: '4px 6px',
-              border: '1px solid #B8960C', borderRadius: 4,
-              background: '#fff',
-            }}
+            style={{ resize: 'none', fontSize: 13, padding: '4px 6px', border: '1px solid #B8960C', borderRadius: 4, background: '#fff' }}
             placeholder="输入注释内容… (Ctrl+Enter 确认)"
           />
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
             <button onClick={() => setPendingNote(null)} style={btnStyle('none')}>取消</button>
             <button onClick={confirmNote}
-              style={{ ...btnStyle('none'), background: '#2563eb', color: '#fff', border: 'none' }}>
-              确认
-            </button>
+              style={{ ...btnStyle('none'), background: '#2563eb', color: '#fff', border: 'none' }}>确认</button>
           </div>
         </div>
       )}
