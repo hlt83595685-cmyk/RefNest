@@ -4,6 +4,21 @@ import { TextLayer } from 'pdfjs-dist'
 import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString, PDFRef } from 'pdf-lib'
 import 'pdfjs-dist/web/pdf_viewer.css'
 
+// Module-level singleton: ensures workerSrc is set exactly once across all mounts
+let _workerReady: Promise<void> | null = null
+function ensureWorker(): Promise<void> {
+  if (!_workerReady) {
+    _workerReady = (async () => {
+      const path = await window.refnest.fs.pdfjsWorkerPath()
+      const raw = await window.refnest.fs.readFile(path)
+      pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
+        new Blob([new Uint8Array(raw)], { type: 'text/javascript' })
+      )
+    })()
+  }
+  return _workerReady
+}
+
 type Tool = 'none' | 'highlight' | 'note' | 'erase'
 
 // Highlight colors: [cssHex for canvas, [r,g,b] 0-1 for PDF]
@@ -171,7 +186,6 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const [notePopup, setNotePopup] = useState<{ id: string; editing: boolean } | null>(null)
   const [editText, setEditText] = useState('')
 
-  const workerReadyRef = useRef(false)
   const pdfBytesRef = useRef<Uint8Array | null>(null)
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null)
   const viewportsRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map())
@@ -182,17 +196,6 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const toolRef = useRef<Tool>('none')
   useEffect(() => { toolRef.current = tool }, [tool])
 
-  // ── worker ──
-
-  const initWorker = useCallback(async () => {
-    if (workerReadyRef.current) return
-    workerReadyRef.current = true
-    const path = await window.refnest.fs.pdfjsWorkerPath()
-    const raw = await window.refnest.fs.readFile(path)
-    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
-      new Blob([new Uint8Array(raw)], { type: 'text/javascript' })
-    )
-  }, [])
 
   // ── canvas drawing ──
 
@@ -293,7 +296,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     setLoading(true); setError(null)
     async function load(): Promise<void> {
       try {
-        await initWorker()
+        await ensureWorker()
         const raw = await window.refnest.fs.readFile(filePath)
         if (cancelled) return
         const bytes = new Uint8Array(raw)
@@ -315,7 +318,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     }
     load()
     return () => { cancelled = true }
-  }, [filePath, initWorker, loadAnnotations, renderPage])
+  }, [filePath, loadAnnotations, renderPage])
 
   // ── scale change → full re-render ──
 
