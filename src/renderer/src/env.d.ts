@@ -57,6 +57,8 @@ interface RefNestAPI {
     pending: number
   }) => void) => void
   offPdf2mdStatus: () => void
+  onToolsOpen: (cb: (tab: string) => void) => void
+  offToolsOpen: () => void
   onSettingsOpen: (cb: (tab: string) => void) => void
   offSettingsOpen: () => void
   onSetLocale: (cb: (locale: string) => void) => void

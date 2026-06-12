@@ -21,11 +21,13 @@ type Pdf2mdProgressCb = (p: {
 
 let _pdf2mdStatusCb: Pdf2mdStatusCb | null = null
 let _pdf2mdProgressCb: Pdf2mdProgressCb | null = null
+let _toolsOpenCb: ((tab: string) => void) | null = null
 let _settingsOpenCb: ((tab: string) => void) | null = null
 let _setLocaleCb: ((locale: string) => void) | null = null
 
 ipcRenderer.on('pdf2md:status', (_ev, e) => { _pdf2mdStatusCb?.(e) })
 ipcRenderer.on('tool:pdf2md:progress', (_ev, p) => { _pdf2mdProgressCb?.(p) })
+ipcRenderer.on('tools:open', (_ev, tab: string) => { _toolsOpenCb?.(tab) })
 ipcRenderer.on('settings:open', (_ev, tab: string) => { _settingsOpenCb?.(tab) })
 ipcRenderer.on('settings:setLocale', (_ev, locale: string) => { _setLocaleCb?.(locale) })
 
@@ -87,6 +89,9 @@ const refnestAPI = {
   // pdf2md status (queue-level, single LED)
   onPdf2mdStatus: (cb: Pdf2mdStatusCb) => { _pdf2mdStatusCb = cb },
   offPdf2mdStatus: () => { _pdf2mdStatusCb = null },
+  // menu-driven tools panel
+  onToolsOpen: (cb: (tab: string) => void) => { _toolsOpenCb = cb },
+  offToolsOpen: () => { _toolsOpenCb = null },
   // menu-driven settings panel
   onSettingsOpen: (cb: (tab: string) => void) => { _settingsOpenCb = cb },
   offSettingsOpen: () => { _settingsOpenCb = null },

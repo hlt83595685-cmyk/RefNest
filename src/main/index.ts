@@ -11,17 +11,19 @@ let mainWindow: BrowserWindow | null = null
 
 const menuLabels: Record<string, Record<string, string>> = {
   zh: {
+    tools:       '工具',
+    pdf2md:      'pdf2md 设置...',
     settings:    '设置',
     storagePath: '文件存储路径...',
-    pdf2md:      'pdf2md 设置...',
     language:    '语言',
     langZh:      '中文',
     langEn:      'English',
   },
   en: {
+    tools:       'Tools',
+    pdf2md:      'pdf2md Settings...',
     settings:    'Settings',
     storagePath: 'Storage Path...',
-    pdf2md:      'pdf2md Settings...',
     language:    'Language',
     langZh:      '中文',
     langEn:      'English',
@@ -32,15 +34,20 @@ function buildMenu(locale: string): void {
   const L = menuLabels[locale] ?? menuLabels['zh']
   const menu = Menu.buildFromTemplate([
     {
+      label: L.tools,
+      submenu: [
+        {
+          label: L.pdf2md,
+          click: (): void => { mainWindow?.webContents.send('tools:open', 'pdf2md') },
+        },
+      ],
+    },
+    {
       label: L.settings,
       submenu: [
         {
           label: L.storagePath,
           click: (): void => { mainWindow?.webContents.send('settings:open', 'storage') },
-        },
-        {
-          label: L.pdf2md,
-          click: (): void => { mainWindow?.webContents.send('settings:open', 'pdf2md') },
         },
         { type: 'separator' },
         {

@@ -2,6 +2,29 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
 const zh = {
+  tools: {
+    title: '工具',
+    pdf2md: {
+      title: 'pdf2md 设置',
+      enableLabel: '启用 pdf2md',
+      enableDesc: '启用后，导入 PDF 时自动通过 MinerU API 转为多模态 Markdown',
+      disabledNote: '已禁用。导入 PDF 时不会触发自动转换。',
+      docsTitle: '文档',
+      docsDesc: 'MinerU API 官方文档（Agent 免费模式：10 MB / 20 页）',
+      openDocs: '打开文档 ↗',
+      testTitle: '测试转换',
+      testDesc: '选择本地 PDF 和输出目录，验证 MinerU API 连通性与转换效果。',
+      testBtn: '选择 PDF 并测试',
+      testRunning: '处理中...',
+      pickPdf: '请选择一个 PDF 文件...',
+      pickDir: '请选择输出目录...',
+      uploading: '上传文件...',
+      success: '转换成功',
+      retry: '重试',
+      retryAgain: '再测一次',
+    },
+    close: '关闭',
+  },
   settings: {
     title: '设置',
     storage: {
@@ -17,9 +40,6 @@ const zh = {
       label: '界面语言',
       zh: '中文',
       en: 'English',
-    },
-    pdf2md: {
-      title: 'pdf2md 设置',
     },
     close: '关闭',
   },
@@ -109,6 +129,29 @@ const zh = {
 }
 
 const en = {
+  tools: {
+    title: 'Tools',
+    pdf2md: {
+      title: 'pdf2md Settings',
+      enableLabel: 'Enable pdf2md',
+      enableDesc: 'When enabled, imported PDFs are automatically converted to multimodal Markdown via MinerU API',
+      disabledNote: 'Disabled. Auto-conversion will not run on import.',
+      docsTitle: 'Documentation',
+      docsDesc: 'MinerU API official docs (Agent free mode: 10 MB / 20 pages)',
+      openDocs: 'Open Docs ↗',
+      testTitle: 'Test Conversion',
+      testDesc: 'Pick a local PDF and output directory to verify MinerU API connectivity.',
+      testBtn: 'Pick PDF & Test',
+      testRunning: 'Processing...',
+      pickPdf: 'Please select a PDF file...',
+      pickDir: 'Please select an output directory...',
+      uploading: 'Uploading file...',
+      success: 'Conversion successful',
+      retry: 'Retry',
+      retryAgain: 'Test Again',
+    },
+    close: 'Close',
+  },
   settings: {
     title: 'Settings',
     storage: {
@@ -124,9 +167,6 @@ const en = {
       label: 'Interface language',
       zh: '中文',
       en: 'English',
-    },
-    pdf2md: {
-      title: 'pdf2md Settings',
     },
     close: 'Close',
   },

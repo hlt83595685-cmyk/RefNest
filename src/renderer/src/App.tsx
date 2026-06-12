@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MainLayout } from './components/layout/MainLayout'
 import { SettingsDialog } from './components/tools/SettingsDialog'
+import { ToolsDialog } from './components/tools/ToolsDialog'
 import { useItemStore } from './stores/itemStore'
 import { useStatusStore } from './stores/statusStore'
 import './i18n'
@@ -11,6 +12,7 @@ export default function App(): JSX.Element {
   const { setStatus } = useStatusStore()
   const { i18n } = useTranslation('common')
   const [settingsTab, setSettingsTab] = useState<string | null>(null)
+  const [toolsTab, setToolsTab] = useState<string | null>(null)
 
   useEffect(() => {
     if (!window.refnest) {
@@ -20,7 +22,13 @@ export default function App(): JSX.Element {
     loadItems()
   }, [loadItems])
 
-  // Menu → open settings on a specific tab
+  // Menu → open tools dialog
+  useEffect(() => {
+    window.refnest.onToolsOpen((tab) => setToolsTab(tab))
+    return () => window.refnest.offToolsOpen()
+  }, [])
+
+  // Menu → open settings dialog
   useEffect(() => {
     window.refnest.onSettingsOpen((tab) => setSettingsTab(tab))
     return () => window.refnest.offSettingsOpen()
@@ -61,6 +69,12 @@ export default function App(): JSX.Element {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <MainLayout />
+      {toolsTab !== null && (
+        <ToolsDialog
+          initialTab={toolsTab}
+          onClose={() => setToolsTab(null)}
+        />
+      )}
       {settingsTab !== null && (
         <SettingsDialog
           initialTab={settingsTab}
