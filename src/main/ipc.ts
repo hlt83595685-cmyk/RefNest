@@ -1,6 +1,6 @@
 import { IpcMain, dialog, shell, BrowserWindow } from 'electron'
 import { convertPdfToMarkdown } from './mineruApi'
-import { saveSettings, isPdf2mdEnabled, getStoragePath, saveStoragePath } from './pdf2mdService'
+import { saveSettings, isPdf2mdEnabled, getStoragePath, saveStoragePath, manualConvertPdfToMd } from './pdf2mdService'
 import {
   getAllItems, getTrashedItems, getItemById,
   getAllItemsWithTags, getItemsByCollectionWithTags,
@@ -132,6 +132,12 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     } else {
       saveSettings({ [key]: value })
     }
+  })
+
+  // Manual pdf2md from context menu
+  ipcMain.handle('pdf2md:convertItem', (_e, itemId: number) => {
+    const err = manualConvertPdfToMd(itemId)
+    return { error: err }
   })
 
   // Pick storage directory

@@ -49,6 +49,9 @@ interface RefNestAPI {
     pickStoragePath: () => Promise<string | null>
     notifyLocale: (locale: string) => void
   }
+  pdf2md: {
+    convertItem: (itemId: number) => Promise<{ error: string | null }>
+  }
   onPdf2mdStatus: (cb: (e: {
     filename: string
     state: 'running' | 'done' | 'error' | 'idle'

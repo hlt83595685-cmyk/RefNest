@@ -110,11 +110,12 @@ async function agentPollResult(taskId: string): Promise<string> {
  */
 export async function convertPdfToMarkdownAuto(
   filePath: string,
-  onProgress?: (p: MinerUProgress) => void
+  onProgress?: (p: MinerUProgress) => void,
+  outputPath?: string
 ): Promise<string> {
   const outputDir = dirname(filePath)
   const stem = basename(filePath, '.pdf')
-  const outPath = join(outputDir, `${stem}.md`)
+  const outPath = outputPath ?? join(outputDir, `${stem}.md`)
 
   onProgress?.({ state: 'pending', message: '读取 PDF 页数...' })
   const pageCount = await getPdfPageCount(filePath)

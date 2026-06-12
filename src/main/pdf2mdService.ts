@@ -67,6 +67,7 @@ export function saveStoragePath(p: string): void {
 interface QueueItem {
   itemId: number
   pdfPath: string
+  outputPath?: string  // explicit output file path (used for versioned re-conversion)
 }
 
 const _queue: QueueItem[] = []
@@ -78,20 +79,21 @@ async function drainQueue(): Promise<void> {
 
   while (_queue.length > 0) {
     const job = _queue.shift()!
-    await runConversion(job.itemId, job.pdfPath)
+    await runConversion(job)
   }
 
   _running = false
 }
 
-async function runConversion(itemId: number, pdfPath: string): Promise<void> {
+async function runConversion(job: QueueItem): Promise<void> {
+  const { itemId, pdfPath, outputPath } = job
   const filename = basename(pdfPath)
 
   const push = (state: Pdf2mdTaskState, message: string, chunk?: string): void => {
     pushStatus({ filename, state, message, chunk, pending: _queue.length })
   }
 
-  console.log(`[pdf2md] Converting: ${pdfPath}`)
+  console.log(`[pdf2md] Converting: ${pdfPath}${outputPath ? ` -> ${outputPath}` : ''}`)
   push('running', '准备中...')
 
   try {
@@ -99,7 +101,7 @@ async function runConversion(itemId: number, pdfPath: string): Promise<void> {
       const msg = p.message ?? p.state
       console.log(`[pdf2md]${p.chunk ? ` [${p.chunk}]` : ''} ${msg}`)
       push('running', msg, p.chunk)
-    })
+    }, outputPath)
     registerAttachment(itemId, outPath)
     console.log(`[pdf2md] Done: ${outPath}`)
     push('done', '转换完成')
@@ -133,6 +135,41 @@ export function autoConvertPdfToMd(itemId: number, pdfPath: string): void {
   }
 
   _queue.push({ itemId, pdfPath })
-  // drainQueue is async but we intentionally don't await it here
   drainQueue().catch((err) => console.error('[pdf2md] Queue error:', err))
+}
+
+/**
+ * Manually trigger conversion for an item from the context menu.
+ * If a .md already exists for this PDF, append a version suffix (-1, -2, ...).
+ * Returns an error string if no PDF attachment found, otherwise enqueues.
+ */
+export function manualConvertPdfToMd(itemId: number): string | null {
+  const attachments = getAttachmentsByItem(itemId)
+  const pdfAtt = attachments.find(
+    (a) => a.mime_type === 'application/pdf' || a.filename?.toLowerCase().endsWith('.pdf')
+  )
+  if (!pdfAtt?.path) return 'no_pdf'
+
+  const pdfPath = pdfAtt.path
+  const dir = dirname(pdfPath)
+  const stem = basename(pdfPath, '.pdf')
+
+  // Determine versioned output path
+  const baseMd = join(dir, `${stem}.md`)
+  let outputPath = baseMd
+  if (existsSync(baseMd) || attachments.some((a) => a.path === baseMd)) {
+    let version = 1
+    while (true) {
+      const candidate = join(dir, `${stem}-${version}.md`)
+      if (!existsSync(candidate) && !attachments.some((a) => a.path === candidate)) {
+        outputPath = candidate
+        break
+      }
+      version++
+    }
+  }
+
+  _queue.push({ itemId, pdfPath, outputPath })
+  drainQueue().catch((err) => console.error('[pdf2md] Queue error:', err))
+  return null
 }

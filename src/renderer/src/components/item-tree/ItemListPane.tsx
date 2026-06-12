@@ -222,6 +222,14 @@ export function ItemListPane(): JSX.Element {
     if (result.added > 0) await loadItems()
   }
 
+  const handlePdf2md = async (itemId: number): Promise<void> => {
+    setContextMenu(null)
+    const result = await window.refnest.pdf2md.convertItem(itemId)
+    if (result.error === 'no_pdf') {
+      alert(t('item.pdf2mdNoPdf'))
+    }
+  }
+
   const handleMoveToCollection = async (itemId: number, colId: number): Promise<void> => {
     // Remove from current collection (if in one), add to target
     if (activeColId !== null) {
@@ -348,8 +356,12 @@ export function ItemListPane(): JSX.Element {
           ) : isCollection ? (
             <>
               {contextMenu.itemId !== null && (
-                <ContextItem label={t('item.extractKeywords')} icon="🔑" color="var(--foreground)"
-                  onClick={() => handleExtractKeywords(contextMenu.itemId!)} />
+                <>
+                  <ContextItem label={t('item.extractKeywords')} icon="🔑" color="var(--foreground)"
+                    onClick={() => handleExtractKeywords(contextMenu.itemId!)} />
+                  <ContextItem label={t('item.pdf2md')} icon="M↓" color="var(--primary)"
+                    onClick={() => handlePdf2md(contextMenu.itemId!)} />
+                </>
               )}
               {contextMenu.itemId !== null && collections.filter(c => c.id !== activeColId).length > 0 && (
                 <CollectionSubMenu
@@ -367,8 +379,12 @@ export function ItemListPane(): JSX.Element {
           ) : (
             <>
               {contextMenu.itemId !== null && (
-                <ContextItem label={t('item.extractKeywords')} icon="🔑" color="var(--foreground)"
-                  onClick={() => handleExtractKeywords(contextMenu.itemId!)} />
+                <>
+                  <ContextItem label={t('item.extractKeywords')} icon="🔑" color="var(--foreground)"
+                    onClick={() => handleExtractKeywords(contextMenu.itemId!)} />
+                  <ContextItem label={t('item.pdf2md')} icon="M↓" color="var(--primary)"
+                    onClick={() => handlePdf2md(contextMenu.itemId!)} />
+                </>
               )}
               {collections.length > 0 && contextMenu.itemId !== null && (
                 <CollectionSubMenu

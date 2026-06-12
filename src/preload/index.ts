@@ -86,6 +86,9 @@ const refnestAPI = {
     pickStoragePath: () => ipcRenderer.invoke('settings:pickStoragePath'),
     notifyLocale: (locale: string) => ipcRenderer.send('menu:setLocale', locale),
   },
+  pdf2md: {
+    convertItem: (itemId: number) => ipcRenderer.invoke('pdf2md:convertItem', itemId),
+  },
   // pdf2md status (queue-level, single LED)
   onPdf2mdStatus: (cb: Pdf2mdStatusCb) => { _pdf2mdStatusCb = cb },
   offPdf2mdStatus: () => { _pdf2mdStatusCb = null },
