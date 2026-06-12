@@ -1,13 +1,30 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
-import { TextLayer, AnnotationMode } from 'pdfjs-dist'
-import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString, PDFDict, PDFHexString, rgb } from 'pdf-lib'
+import { TextLayer } from 'pdfjs-dist'
+import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString } from 'pdf-lib'
 import 'pdfjs-dist/web/pdf_viewer.css'
 
 type Tool = 'none' | 'highlight' | 'note'
 
 interface Props {
   filePath: string
+}
+
+// A highlight stored in React state for canvas overlay drawing
+interface HighlightRect {
+  id: string
+  pageNum: number
+  // PDF-space coordinates
+  pdfRect: [number, number, number, number]
+}
+
+// A sticky note stored in React state for DOM overlay
+interface NoteAnnot {
+  id: string
+  pageNum: number
+  pdfX: number
+  pdfY: number
+  contents: string
 }
 
 interface PendingNote {
@@ -18,97 +35,80 @@ interface PendingNote {
   pageNum: number
 }
 
-// Write a /Highlight annotation directly into PDF bytes using pdf-lib low-level API.
-// PDF coordinate system: origin bottom-left. rect = [x1, y1, x2, y2].
-async function addHighlight(
-  pdfBytes: Uint8Array,
-  pageIndex: number,
-  rect: [number, number, number, number]
-): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(pdfBytes)
-  const page = doc.getPage(pageIndex)
-  const { context } = doc
+// ── PDF write helpers ────────────────────────────────────────────────────────
 
-  // QuadPoints: 8 numbers per quad = [x1,y2, x2,y2, x1,y1, x2,y1] (top-left going clockwise)
+async function addHighlightToPdf(
+  bytes: Uint8Array,
+  pageIndex: number,
+  rect: [number, number, number, number],
+  id: string
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes)
+  const page = doc.getPage(pageIndex)
   const [x1, y1, x2, y2] = rect
   const quadPoints = [x1, y2, x2, y2, x1, y1, x2, y1]
 
-  const annotDict = context.obj({
+  const annot = doc.context.obj({
     Type: PDFName.of('Annot'),
     Subtype: PDFName.of('Highlight'),
-    Rect: context.obj(rect),
-    QuadPoints: context.obj(quadPoints),
-    C: context.obj([1, 0.87, 0]),   // yellow in 0-1 range
-    CA: PDFNumber.of(0.6),          // opacity
-    F: PDFNumber.of(4),             // Print flag
-    NM: PDFString.of(`hl-${Date.now()}`),
-    M: PDFString.of(new Date().toISOString()),
+    Rect: doc.context.obj([x1, y1, x2, y2]),
+    QuadPoints: doc.context.obj(quadPoints),
+    C: doc.context.obj([1, 0.87, 0]),
+    CA: PDFNumber.of(0.5),
+    F: PDFNumber.of(4),
+    NM: PDFString.of(id),
     T: PDFString.of('RefNest'),
     Contents: PDFString.of(''),
   })
-
-  const annotRef = context.register(annotDict)
-
-  // Add to page's /Annots array
-  const annotsRef = page.node.get(PDFName.of('Annots'))
-  let annotsArray: PDFArray
-  if (annotsRef instanceof PDFArray) {
-    annotsArray = annotsRef
-  } else if (annotsRef) {
-    const resolved = doc.context.lookup(annotsRef)
-    annotsArray = resolved instanceof PDFArray ? resolved : context.obj([])
-  } else {
-    annotsArray = context.obj([])
-  }
-  annotsArray.push(annotRef)
-  page.node.set(PDFName.of('Annots'), annotsArray)
-
+  const ref = doc.context.register(annot)
+  pushAnnotRef(doc, page, ref)
   return doc.save()
 }
 
-// Write a /Text (sticky note) annotation
-async function addTextAnnotation(
-  pdfBytes: Uint8Array,
+async function addNoteToPdf(
+  bytes: Uint8Array,
   pageIndex: number,
   x: number,
   y: number,
-  contents: string
+  contents: string,
+  id: string
 ): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(pdfBytes)
+  const doc = await PDFDocument.load(bytes)
   const page = doc.getPage(pageIndex)
-  const { context } = doc
 
-  const annotDict = context.obj({
+  const annot = doc.context.obj({
     Type: PDFName.of('Annot'),
     Subtype: PDFName.of('Text'),
-    Rect: context.obj([x, y, x + 20, y + 20]),
+    Rect: doc.context.obj([x, y, x + 20, y + 20]),
     Contents: PDFString.of(contents),
     T: PDFString.of('RefNest'),
-    NM: PDFString.of(`note-${Date.now()}`),
-    M: PDFString.of(new Date().toISOString()),
+    NM: PDFString.of(id),
     F: PDFNumber.of(4),
     Open: PDFName.of('false'),
     Name: PDFName.of('Note'),
-    C: context.obj([1, 0.82, 0]),
+    C: doc.context.obj([1, 0.87, 0]),
   })
-
-  const annotRef = context.register(annotDict)
-
-  const annotsRef = page.node.get(PDFName.of('Annots'))
-  let annotsArray: PDFArray
-  if (annotsRef instanceof PDFArray) {
-    annotsArray = annotsRef
-  } else if (annotsRef) {
-    const resolved = doc.context.lookup(annotsRef)
-    annotsArray = resolved instanceof PDFArray ? resolved : context.obj([])
-  } else {
-    annotsArray = context.obj([])
-  }
-  annotsArray.push(annotRef)
-  page.node.set(PDFName.of('Annots'), annotsArray)
-
+  const ref = doc.context.register(annot)
+  pushAnnotRef(doc, page, ref)
   return doc.save()
 }
+
+function pushAnnotRef(doc: PDFDocument, page: ReturnType<PDFDocument['getPage']>, ref: import('pdf-lib').PDFRef): void {
+  const existing = page.node.get(PDFName.of('Annots'))
+  let arr: PDFArray
+  if (existing instanceof PDFArray) {
+    arr = existing
+  } else if (existing) {
+    const resolved = doc.context.lookup(existing)
+    arr = resolved instanceof PDFArray ? resolved : doc.context.obj([])
+  } else {
+    arr = doc.context.obj([])
+  }
+  arr.push(ref)
+  page.node.set(PDFName.of('Annots'), arr)
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -118,31 +118,56 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [noteText, setNoteText] = useState('')
+
+  const [highlights, setHighlights] = useState<HighlightRect[]>([])
+  const [notes, setNotes] = useState<NoteAnnot[]>([])
   const [pendingNote, setPendingNote] = useState<PendingNote | null>(null)
+  const [noteText, setNoteText] = useState('')
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null)
 
   const workerReadyRef = useRef(false)
   const pdfBytesRef = useRef<Uint8Array | null>(null)
-  // The live pdfjs document — always reflects latest bytes
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null)
   const viewportsRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map())
   const scaleRef = useRef(scale)
   useEffect(() => { scaleRef.current = scale }, [scale])
 
+  // ── helpers ──
+
   const initWorker = useCallback(async () => {
     if (workerReadyRef.current) return
     workerReadyRef.current = true
     const workerPath = await window.refnest.fs.pdfjsWorkerPath()
-    const workerRaw = await window.refnest.fs.readFile(workerPath)
-    const blob = new Blob([new Uint8Array(workerRaw)], { type: 'text/javascript' })
+    const raw = await window.refnest.fs.readFile(workerPath)
+    const blob = new Blob([new Uint8Array(raw)], { type: 'text/javascript' })
     pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob)
   }, [])
 
-  // Render one page onto its canvas (with annotation layer)
+  // Draw highlight overlays on canvas via 2D context (no re-render needed)
+  const drawHighlightsOnPage = useCallback((pageNum: number, hl: HighlightRect[], vp: pdfjsLib.PageViewport) => {
+    const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    ctx.save()
+    ctx.globalCompositeOperation = 'multiply'
+    ctx.globalAlpha = 0.4
+    ctx.fillStyle = '#FFE014'
+    for (const h of hl.filter(h => h.pageNum === pageNum)) {
+      const [x1, y1, x2, y2] = h.pdfRect
+      // PDF coords: origin bottom-left; canvas: origin top-left
+      const [sx1, sy1] = vp.convertToViewportPoint(x1, y2)
+      const [sx2, sy2] = vp.convertToViewportPoint(x2, y1)
+      ctx.fillRect(sx1, sy1, sx2 - sx1, sy2 - sy1)
+    }
+    ctx.restore()
+  }, [])
+
+  // Render one page: canvas (PDF content only, no annotation layer) + TextLayer
   const renderPage = useCallback(async (
     doc: pdfjsLib.PDFDocumentProxy,
     pageNum: number,
-    currentScale: number
+    currentScale: number,
+    currentHighlights: HighlightRect[]
   ) => {
     const page = await doc.getPage(pageNum)
     const viewport = page.getViewport({ scale: currentScale })
@@ -152,11 +177,16 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     if (!canvas) return
     canvas.width = viewport.width
     canvas.height = viewport.height
+
+    // Render PDF content without annotation layer (we draw highlights manually)
     await page.render({
       canvasContext: canvas.getContext('2d')!,
       viewport,
-      annotationMode: AnnotationMode.ENABLE,
+      annotationMode: 0, // DISABLE — we overlay highlights ourselves
     }).promise
+
+    // Draw stored highlights on top
+    drawHighlightsOnPage(pageNum, currentHighlights, viewport)
 
     // TextLayer
     const wrapper = document.getElementById(`pdf-page-${pageNum}`)
@@ -173,32 +203,33 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
       viewport,
     })
     await tl.render()
-  }, [])
+  }, [drawHighlightsOnPage])
 
-  // Load bytes into a new PDFDocumentProxy, render all pages
-  const loadAndRender = useCallback(async (bytes: Uint8Array) => {
-    pdfBytesRef.current = bytes
-    viewportsRef.current.clear()
-    const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-    const old = pdfDocRef.current
-    pdfDocRef.current = doc
-    setNumPages(doc.numPages)
-    // render all pages then destroy old doc
+  // Load existing annotations from PDF into state
+  const loadAnnotations = useCallback(async (doc: pdfjsLib.PDFDocumentProxy) => {
+    const hls: HighlightRect[] = []
+    const nts: NoteAnnot[] = []
     for (let i = 1; i <= doc.numPages; i++) {
-      await renderPage(doc, i, scaleRef.current)
+      const page = await doc.getPage(i)
+      const annots = await page.getAnnotations()
+      for (const a of annots) {
+        if (a.subtype === 'Highlight' && a.rect) {
+          hls.push({ id: a.id ?? `hl-${i}-${hls.length}`, pageNum: i, pdfRect: a.rect })
+        } else if (a.subtype === 'Text' && a.rect) {
+          nts.push({
+            id: a.id ?? `note-${i}-${nts.length}`,
+            pageNum: i,
+            pdfX: a.rect[0],
+            pdfY: a.rect[1],
+            contents: a.contents ?? '',
+          })
+        }
+      }
     }
-    old?.destroy()
-  }, [renderPage])
-
-  // Re-render only one page from new bytes (fast path after annotation)
-  const rerenderOnePage = useCallback(async (pageNum: number, bytes: Uint8Array) => {
-    pdfBytesRef.current = bytes
-    const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-    const old = pdfDocRef.current
-    pdfDocRef.current = doc
-    await renderPage(doc, pageNum, scaleRef.current)
-    old?.destroy()
-  }, [renderPage])
+    setHighlights(hls)
+    setNotes(nts)
+    return hls
+  }, [])
 
   // Initial load
   useEffect(() => {
@@ -210,7 +241,18 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
         await initWorker()
         const raw = await window.refnest.fs.readFile(filePath)
         if (cancelled) return
-        await loadAndRender(new Uint8Array(raw))
+        const bytes = new Uint8Array(raw)
+        pdfBytesRef.current = bytes
+        viewportsRef.current.clear()
+        const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
+        if (cancelled) return
+        pdfDocRef.current = doc
+        setNumPages(doc.numPages)
+        const hls = await loadAnnotations(doc)
+        for (let i = 1; i <= doc.numPages; i++) {
+          if (cancelled) return
+          await renderPage(doc, i, scaleRef.current, hls)
+        }
         if (!cancelled) setLoading(false)
       } catch (e) {
         if (!cancelled) { setError(String(e)); setLoading(false) }
@@ -218,9 +260,12 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     }
     load()
     return () => { cancelled = true }
-  }, [filePath, initWorker, loadAndRender])
+  }, [filePath, initWorker, loadAnnotations, renderPage])
 
-  // Re-render all pages on scale change
+  // Re-render all pages on scale change (uses current highlights from state via ref)
+  const highlightsRef = useRef<HighlightRect[]>([])
+  useEffect(() => { highlightsRef.current = highlights }, [highlights])
+
   useEffect(() => {
     const doc = pdfDocRef.current
     if (!doc || loading) return
@@ -229,12 +274,14 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     async function rerender(): Promise<void> {
       for (let i = 1; i <= doc!.numPages; i++) {
         if (cancelled) return
-        await renderPage(doc!, i, scale)
+        await renderPage(doc!, i, scale, highlightsRef.current)
       }
     }
     rerender()
     return () => { cancelled = true }
   }, [scale, loading, renderPage])
+
+  // ── event handlers ──
 
   function pageNumOfNode(node: Node | null): number | null {
     let el = node instanceof Element ? node : node?.parentElement
@@ -269,23 +316,39 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     const viewport = viewportsRef.current.get(pageNum)
     const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
     if (!viewport || !canvas || !pdfBytesRef.current) return
+
     const pdfRect = selectionToPdfRect(viewport, canvas, selRect)
     sel.removeAllRanges()
 
+    const id = `hl-${Date.now()}`
+    const newHl: HighlightRect = { id, pageNum, pdfRect }
+
+    // 1. Immediately draw on canvas — no re-render, no flicker
+    drawHighlightsOnPage(pageNum, [newHl], viewport)
+    setHighlights(prev => [...prev, newHl])
+
+    // 2. Persist to PDF in background
     setSaving(true)
     try {
-      const newBytes = await addHighlight(pdfBytesRef.current, pageNum - 1, pdfRect)
+      const newBytes = await addHighlightToPdf(pdfBytesRef.current, pageNum - 1, pdfRect, id)
       await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
-      await rerenderOnePage(pageNum, newBytes)
+      pdfBytesRef.current = newBytes
+      // Update pdfDoc reference silently (for next annotation parse), no re-render
+      const newDoc = await pdfjsLib.getDocument({ data: newBytes.slice() }).promise
+      pdfDocRef.current?.destroy()
+      pdfDocRef.current = newDoc
     } catch (err) {
-      console.error('[PdfAnnotationViewer] highlight failed:', err)
+      console.error('[PdfAnnotationViewer] highlight save failed:', err)
     } finally {
       setSaving(false)
     }
-  }, [tool, filePath, rerenderOnePage])
+  }, [tool, filePath, drawHighlightsOnPage])
 
   const handlePageClick = useCallback((e: React.MouseEvent, pageNum: number) => {
     if (tool !== 'note') return
+    // Don't open note placement if clicking on an existing note icon
+    const target = e.target as HTMLElement
+    if (target.closest('[data-note-icon]')) return
     const viewport = viewportsRef.current.get(pageNum)
     const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
     if (!viewport || !canvas) return
@@ -297,24 +360,47 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
 
   const confirmNote = useCallback(async () => {
     if (!pendingNote || !pdfBytesRef.current) return
+    const { pageNum, pdfX, pdfY } = pendingNote
     setPendingNote(null)
+
+    const id = `note-${Date.now()}`
+    const newNote: NoteAnnot = { id, pageNum, pdfX, pdfY, contents: noteText }
+
+    // 1. Add to state immediately — icon appears without waiting for disk write
+    setNotes(prev => [...prev, newNote])
+
+    // 2. Persist to PDF
     setSaving(true)
     try {
-      const newBytes = await addTextAnnotation(
-        pdfBytesRef.current,
-        pendingNote.pageNum - 1,
-        pendingNote.pdfX,
-        pendingNote.pdfY,
-        noteText
-      )
+      const newBytes = await addNoteToPdf(pdfBytesRef.current, pageNum - 1, pdfX, pdfY, noteText, id)
       await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
-      await rerenderOnePage(pendingNote.pageNum, newBytes)
+      pdfBytesRef.current = newBytes
+      const newDoc = await pdfjsLib.getDocument({ data: newBytes.slice() }).promise
+      pdfDocRef.current?.destroy()
+      pdfDocRef.current = newDoc
     } catch (err) {
-      console.error('[PdfAnnotationViewer] note failed:', err)
+      console.error('[PdfAnnotationViewer] note save failed:', err)
     } finally {
       setSaving(false)
     }
-  }, [pendingNote, noteText, filePath, rerenderOnePage])
+  }, [pendingNote, noteText, filePath])
+
+  // Convert PDF coordinates to canvas screen position for note icon placement
+  function noteIconPos(note: NoteAnnot): { left: number; top: number } | null {
+    const viewport = viewportsRef.current.get(note.pageNum)
+    if (!viewport) return null
+    const canvas = document.getElementById(`pdf-canvas-${note.pageNum}`) as HTMLCanvasElement | null
+    if (!canvas) return null
+    const cr = canvas.getBoundingClientRect()
+    const wrapper = document.getElementById(`pdf-page-${note.pageNum}`)
+    if (!wrapper) return null
+    const wr = wrapper.getBoundingClientRect()
+    const [sx, sy] = viewport.convertToViewportPoint(note.pdfX, note.pdfY)
+    // Position relative to wrapper (which is position:relative)
+    return { left: sx + (cr.left - wr.left), top: sy + (cr.top - wr.top) }
+  }
+
+  // ── styles ──
 
   const btnStyle = (t: Tool): React.CSSProperties => ({
     padding: '4px 10px', borderRadius: 6,
@@ -361,6 +447,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
         {loading && (
           <div style={{ textAlign: 'center', color: '#ccc', paddingTop: 60, fontSize: 14 }}>加载中…</div>
         )}
+
         {Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
           <div key={pageNum} style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
             <div
@@ -377,25 +464,77 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
                   cursor: tool === 'note' ? 'crosshair' : 'default',
                 }}
               />
+              {/* Note icons overlaid on each page */}
+              {notes.filter(n => n.pageNum === pageNum).map(note => {
+                const pos = noteIconPos(note)
+                if (!pos) return null
+                const isOpen = openNoteId === note.id
+                return (
+                  <div key={note.id} style={{ position: 'absolute', left: pos.left, top: pos.top, zIndex: 10 }}>
+                    {/* Icon */}
+                    <div
+                      data-note-icon="1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setOpenNoteId(isOpen ? null : note.id)
+                      }}
+                      style={{
+                        width: 22, height: 22,
+                        background: '#FFD700',
+                        border: '1.5px solid #B8960C',
+                        borderRadius: '4px 4px 0 4px',
+                        cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 13,
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                      }}
+                      title={note.contents}
+                    >
+                      📝
+                    </div>
+                    {/* Popup */}
+                    {isOpen && (
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          position: 'absolute', left: 24, top: 0,
+                          minWidth: 200, maxWidth: 280,
+                          background: '#FFFDE7',
+                          border: '1px solid #B8960C',
+                          borderRadius: '0 6px 6px 6px',
+                          padding: '8px 10px',
+                          fontSize: 12, lineHeight: 1.5,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          zIndex: 20,
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, marginBottom: 4, color: '#7a6000' }}>便签</div>
+                        <div>{note.contents || <span style={{ color: '#aaa' }}>（无内容）</span>}</div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Note popup */}
+      {/* Note input popup */}
       {pendingNote && (
         <div style={{
           position: 'fixed',
           left: Math.min(pendingNote.screenX + 12, window.innerWidth - 260),
           top: Math.min(pendingNote.screenY + 12, window.innerHeight - 170),
           zIndex: 1000,
-          background: 'var(--surface, #fff)',
-          border: '1px solid var(--border, #d1d5db)',
+          background: '#FFFDE7',
+          border: '1px solid #B8960C',
           borderRadius: 8, padding: 12,
           boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
           display: 'flex', flexDirection: 'column', gap: 8, minWidth: 230,
         }}>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>添加便签</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#7a6000' }}>添加便签</span>
           <textarea
             autoFocus
             value={noteText}
@@ -404,8 +543,8 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
             rows={3}
             style={{
               resize: 'none', fontSize: 13, padding: '4px 6px',
-              border: '1px solid var(--border, #d1d5db)', borderRadius: 4,
-              background: 'var(--bg, #f9fafb)',
+              border: '1px solid #B8960C', borderRadius: 4,
+              background: '#fff',
             }}
             placeholder="输入注释内容… (Ctrl+Enter 确认)"
           />
