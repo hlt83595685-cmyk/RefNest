@@ -69,6 +69,11 @@ interface RefNestAPI {
   import: {
     openDialog: (collectionId?: number) => Promise<ImportResult>
   }
+  fs: {
+    readFile: (filePath: string) => Promise<Buffer>
+    writeFile: (filePath: string, data: Uint8Array) => Promise<void>
+    pdfjsWorkerPath: () => Promise<string>
+  }
   tools: {
     openExternal: (url: string) => Promise<void>
     pickPdf: () => Promise<string | null>

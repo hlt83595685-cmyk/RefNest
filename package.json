@@ -17,6 +17,7 @@
     "rebuild": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
+    "annotpdf": "^1.0.15",
     "better-sqlite3": "^11.9.1",
     "citeproc": "^2.4.62",
     "clsx": "^2.1.1",
@@ -24,6 +25,7 @@
     "octokit": "^4.1.0",
     "pdf-lib": "^1.17.1",
     "pdf-parse-new": "^2.1.0",
+    "pdfjs-dist": "^4.9.155",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^15.5.2",
@@ -63,7 +65,9 @@
     ],
     "win": {
       "icon": "resources/icon.ico",
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -78,11 +82,15 @@
     },
     "mac": {
       "icon": "resources/icon.icns",
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "linux": {
       "icon": "resources/icon.png",
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     }
   }
 }

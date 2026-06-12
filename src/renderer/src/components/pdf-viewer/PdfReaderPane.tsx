@@ -1,18 +1,12 @@
 import { useTranslation } from 'react-i18next'
 import { useItemStore } from '../../stores/itemStore'
+import { PdfAnnotationViewer } from './PdfAnnotationViewer'
 
 export function PdfReaderPane(): JSX.Element {
   const { t } = useTranslation('common')
   const { viewerPath, viewerFilename, closePdf } = useItemStore()
 
   if (!viewerPath) return <></>
-
-  const encoded = viewerPath
-    .replace(/\\/g, '/')
-    .split('/')
-    .map((seg) => encodeURIComponent(seg))
-    .join('/')
-  const src = `refnest-file://${encoded}`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
@@ -74,13 +68,9 @@ export function PdfReaderPane(): JSX.Element {
         </button>
       </div>
 
-      {/* PDF iframe */}
+      {/* PDF viewer with annotation layer */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <iframe
-          src={src}
-          style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-          title="PDF Viewer"
-        />
+        <PdfAnnotationViewer filePath={viewerPath} />
       </div>
     </div>
   )

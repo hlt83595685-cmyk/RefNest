@@ -80,6 +80,11 @@ const refnestAPI = {
   import: {
     openDialog: (collectionId?: number) => ipcRenderer.invoke('import:openDialog', collectionId),
   },
+  fs: {
+    readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
+    writeFile: (filePath: string, data: Uint8Array) => ipcRenderer.invoke('fs:writeFile', filePath, data),
+    pdfjsWorkerPath: () => ipcRenderer.invoke('pdfjs:workerPath'),
+  },
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),
     set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),

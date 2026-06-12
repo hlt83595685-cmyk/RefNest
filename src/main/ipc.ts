@@ -1,4 +1,5 @@
 import { IpcMain, dialog, shell, BrowserWindow } from 'electron'
+import { readFileSync, writeFileSync } from 'fs'
 import { convertPdfToMarkdown } from './mineruApi'
 import { saveSettings, isPdf2mdEnabled, getStoragePath, saveStoragePath, manualConvertPdfToMd } from './pdf2mdService'
 import {
@@ -171,6 +172,17 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
       properties: ['openDirectory'],
     })
     return result.canceled ? null : result.filePaths[0]
+  })
+
+  // PDF file I/O for annotation layer
+  ipcMain.handle('fs:readFile', (_e, filePath: string) => {
+    return readFileSync(filePath)
+  })
+  ipcMain.handle('fs:writeFile', (_e, filePath: string, data: Uint8Array) => {
+    writeFileSync(filePath, Buffer.from(data))
+  })
+  ipcMain.handle('pdfjs:workerPath', () => {
+    return require.resolve('pdfjs-dist/build/pdf.worker.min.mjs')
   })
 
   // PDF to Markdown via MinerU API (caller provides paths)
