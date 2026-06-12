@@ -3,17 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { useItemStore } from '../../stores/itemStore'
 
 export function Toolbar(): JSX.Element {
-  const { t, i18n } = useTranslation('common')
+  const { t } = useTranslation('common')
   const { searchQuery, setSearchQuery, loadItems, activeCollection } = useItemStore()
   const searchRef = useRef<HTMLInputElement>(null)
 
   const activeColId = activeCollection.startsWith('col:')
     ? parseInt(activeCollection.slice(4), 10)
     : undefined
-
-  const toggleLang = (): void => {
-    i18n.changeLanguage(i18n.language === 'zh' ? 'en' : 'zh')
-  }
 
   const handleImport = async (): Promise<void> => {
     const result = await window.refnest.import.openDialog(activeColId)
@@ -151,23 +147,6 @@ export function Toolbar(): JSX.Element {
         {t('toolbar.addItem')}
       </button>
 
-      {/* Lang toggle */}
-      <button
-        onClick={toggleLang}
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border)',
-          background: 'var(--surface)',
-          color: 'var(--muted)',
-          fontSize: 12,
-          fontWeight: 600,
-          boxShadow: 'var(--shadow-xs)',
-        }}
-      >
-        {i18n.language === 'zh' ? 'EN' : '中'}
-      </button>
     </header>
   )
 }
