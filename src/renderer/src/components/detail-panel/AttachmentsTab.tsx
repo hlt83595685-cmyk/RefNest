@@ -45,7 +45,7 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
     const isPdf = att.mime_type === 'application/pdf' || att.filename?.toLowerCase().endsWith('.pdf')
     if (isPdf) {
       const path = await window.refnest.attachments.getPath(att.id)
-      if (path) openPdf(path, att.filename ?? 'document.pdf', itemId)
+      if (path) openPdf(path, att.filename ?? 'document.pdf')
     } else {
       await window.refnest.attachments.openExternal(att.id)
     }

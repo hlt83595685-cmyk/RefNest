@@ -24,7 +24,6 @@
     "octokit": "^4.1.0",
     "pdf-lib": "^1.17.1",
     "pdf-parse-new": "^2.1.0",
-    "pdfjs-dist": "^6.0.227",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^15.5.2",
@@ -64,9 +63,7 @@
     ],
     "win": {
       "icon": "resources/icon.ico",
-      "target": [
-        "nsis"
-      ]
+      "target": ["nsis"]
     },
     "nsis": {
       "oneClick": false,
@@ -81,15 +78,11 @@
     },
     "mac": {
       "icon": "resources/icon.icns",
-      "target": [
-        "dmg"
-      ]
+      "target": ["dmg"]
     },
     "linux": {
       "icon": "resources/icon.png",
-      "target": [
-        "AppImage"
-      ]
+      "target": ["AppImage"]
     }
   }
 }

@@ -174,7 +174,7 @@ export function ItemListPane(): JSX.Element {
       )
       if (!pdf) return
       const path = await window.refnest.attachments.getPath(pdf.id)
-      if (path) useItemStore.getState().openPdf(path, pdf.filename ?? 'document.pdf', item.id)
+      if (path) useItemStore.getState().openPdf(path, pdf.filename ?? 'document.pdf')
     } catch (err) {
       console.error('[ItemListPane] double-click open failed:', err)
     }
@@ -371,10 +371,10 @@ export function ItemListPane(): JSX.Element {
                 />
               )}
               <ContextItem label={t('item.removeFromCollection')} icon="↩" color="var(--primary)"
-                onClick={() => handleRemoveFromCollection(contextMenu.itemId)} />
+                onClick={() => handleRemoveFromCollection(contextMenu.itemId!)} />
               <div style={{ height: 1, background: 'var(--separator)', margin: '4px 8px' }} />
               <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"
-                onClick={() => handleTrash(contextMenu.itemId)} />
+                onClick={() => handleTrash(contextMenu.itemId!)} />
             </>
           ) : (
             <>
@@ -395,7 +395,7 @@ export function ItemListPane(): JSX.Element {
               )}
               {<div style={{ height: 1, background: 'var(--separator)', margin: '4px 8px' }} />}
               <ContextItem label={t('item.moveToTrash')} icon="🗑" color="var(--accent)"
-                onClick={() => handleTrash(contextMenu.itemId)} />
+                onClick={() => handleTrash(contextMenu.itemId!)} />
             </>
           )}
         </div>

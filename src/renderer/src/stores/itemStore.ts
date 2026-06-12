@@ -10,13 +10,12 @@ interface ItemStore {
   // PDF viewer state
   viewerPath: string | null
   viewerFilename: string | null
-  viewerItemId: number | null
   loadItems: () => Promise<void>
   setSelectedId: (id: number | null) => void
   setActiveCollection: (id: string) => void
   setSearchQuery: (q: string) => void
   toggleYearSort: () => void
-  openPdf: (path: string, filename: string, itemId?: number) => void
+  openPdf: (path: string, filename: string) => void
   closePdf: () => void
 }
 
@@ -28,7 +27,6 @@ export const useItemStore = create<ItemStore>((set) => ({
   yearSort: 'none',
   viewerPath: null,
   viewerFilename: null,
-  viewerItemId: null,
 
   loadItems: async () => {
     try {
@@ -53,11 +51,11 @@ export const useItemStore = create<ItemStore>((set) => ({
 
   setSelectedId: (id) => set({ selectedId: id }),
   setActiveCollection: (id) => {
-    set({ activeCollection: id, selectedId: null, viewerPath: null, viewerItemId: null, yearSort: 'none' })
+    set({ activeCollection: id, selectedId: null, viewerPath: null, yearSort: 'none' })
     setTimeout(() => useItemStore.getState().loadItems(), 0)
   },
   setSearchQuery: (q) => set({ searchQuery: q }),
   toggleYearSort: () => set((s) => ({ yearSort: s.yearSort === 'desc' ? 'none' : 'desc' })),
-  openPdf: (path, filename, itemId) => set({ viewerPath: path, viewerFilename: filename, viewerItemId: itemId ?? null }),
-  closePdf: () => set({ viewerPath: null, viewerFilename: null, viewerItemId: null }),
+  openPdf: (path, filename) => set({ viewerPath: path, viewerFilename: filename }),
+  closePdf: () => set({ viewerPath: null, viewerFilename: null }),
 }))

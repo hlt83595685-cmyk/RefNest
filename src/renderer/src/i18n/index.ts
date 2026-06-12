@@ -127,16 +127,6 @@ const zh = {
     backToList: '返回列表',
     openExternal: '外部打开',
     close: '关闭',
-    highlightColor: '高亮颜色',
-    annotationCount: '条注释',
-  },
-  notes: {
-    count: '条笔记',
-    add: '新建笔记',
-    empty: '暂无笔记。在 PDF 中划选文字可自动生成高亮笔记。',
-    placeholder: '输入笔记内容... (Ctrl+Enter 保存)',
-    save: '保存',
-    cancel: '取消',
   },
 }
 
@@ -266,16 +256,6 @@ const en = {
     backToList: 'Back to List',
     openExternal: 'Open Externally',
     close: 'Close',
-    highlightColor: 'Highlight color',
-    annotationCount: 'annotation(s)',
-  },
-  notes: {
-    count: 'note(s)',
-    add: 'New Note',
-    empty: 'No notes yet. Select text in the PDF to create a highlight note.',
-    placeholder: 'Write a note... (Ctrl+Enter to save)',
-    save: 'Save',
-    cancel: 'Cancel',
   },
 }
 

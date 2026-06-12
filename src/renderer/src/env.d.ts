@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { Item, Creator, Collection, Tag, Attachment, ImportResult, Note, Annotation } from '../../shared/types'
+import type { Item, Creator, Collection, Tag, Attachment, ImportResult } from '../../shared/types'
 
 interface RefNestAPI {
   items: {
@@ -49,18 +49,6 @@ interface RefNestAPI {
     pickStoragePath: () => Promise<string | null>
     notifyLocale: (locale: string) => void
   }
-  notes: {
-    getByItem: (itemId: number) => Promise<Note[]>
-    create: (itemId: number, content: string) => Promise<Note>
-    update: (id: number, content: string) => Promise<void>
-    delete: (id: number) => Promise<void>
-  }
-  annotations: {
-    getByItem: (itemId: number) => Promise<Annotation[]>
-    create: (itemId: number, page: number, type: string, color: string, text: string, comment: string, rects: string) => Promise<Annotation>
-    updateComment: (id: number, comment: string) => Promise<void>
-    delete: (id: number) => Promise<void>
-  }
   pdf2md: {
     convertItem: (itemId: number) => Promise<{ error: string | null }>
   }
@@ -79,7 +67,7 @@ interface RefNestAPI {
   onSetLocale: (cb: (locale: string) => void) => void
   offSetLocale: () => void
   import: {
-    openDialog: () => Promise<ImportResult>
+    openDialog: (collectionId?: number) => Promise<ImportResult>
   }
   tools: {
     openExternal: (url: string) => Promise<void>

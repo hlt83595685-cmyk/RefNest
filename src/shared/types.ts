@@ -81,23 +81,3 @@ export interface ImportResult {
   canceled: boolean
   imported: number
 }
-
-export interface Note {
-  id: number
-  item_id: number
-  content: string
-  created_at: number
-  updated_at: number
-}
-
-export interface Annotation {
-  id: number
-  item_id: number
-  page: number          // 1-based
-  type: 'highlight' | 'note'
-  color: string         // hex, e.g. '#FFD700'
-  text: string          // selected / quoted text
-  comment: string       // user's comment (may be empty)
-  rects: string         // JSON: Array<{x,y,w,h}> in % of page size
-  created_at: number
-}
