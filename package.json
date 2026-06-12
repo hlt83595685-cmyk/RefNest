@@ -17,7 +17,6 @@
     "rebuild": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
-    "annotpdf": "^1.0.15",
     "better-sqlite3": "^11.9.1",
     "citeproc": "^2.4.62",
     "clsx": "^2.1.1",

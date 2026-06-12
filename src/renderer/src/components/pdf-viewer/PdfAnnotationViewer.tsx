@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import { TextLayer, AnnotationMode } from 'pdfjs-dist'
-import { AnnotationFactory } from 'annotpdf'
+import { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString, PDFDict, PDFHexString, rgb } from 'pdf-lib'
 import 'pdfjs-dist/web/pdf_viewer.css'
 
 type Tool = 'none' | 'highlight' | 'note'
@@ -9,8 +9,6 @@ type Tool = 'none' | 'highlight' | 'note'
 interface Props {
   filePath: string
 }
-
-const HIGHLIGHT_COLOR = { r: 255, g: 220, b: 0 }
 
 interface PendingNote {
   screenX: number
@@ -20,10 +18,100 @@ interface PendingNote {
   pageNum: number
 }
 
+// Write a /Highlight annotation directly into PDF bytes using pdf-lib low-level API.
+// PDF coordinate system: origin bottom-left. rect = [x1, y1, x2, y2].
+async function addHighlight(
+  pdfBytes: Uint8Array,
+  pageIndex: number,
+  rect: [number, number, number, number]
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes)
+  const page = doc.getPage(pageIndex)
+  const { context } = doc
+
+  // QuadPoints: 8 numbers per quad = [x1,y2, x2,y2, x1,y1, x2,y1] (top-left going clockwise)
+  const [x1, y1, x2, y2] = rect
+  const quadPoints = [x1, y2, x2, y2, x1, y1, x2, y1]
+
+  const annotDict = context.obj({
+    Type: PDFName.of('Annot'),
+    Subtype: PDFName.of('Highlight'),
+    Rect: context.obj(rect),
+    QuadPoints: context.obj(quadPoints),
+    C: context.obj([1, 0.87, 0]),   // yellow in 0-1 range
+    CA: PDFNumber.of(0.6),          // opacity
+    F: PDFNumber.of(4),             // Print flag
+    NM: PDFString.of(`hl-${Date.now()}`),
+    M: PDFString.of(new Date().toISOString()),
+    T: PDFString.of('RefNest'),
+    Contents: PDFString.of(''),
+  })
+
+  const annotRef = context.register(annotDict)
+
+  // Add to page's /Annots array
+  const annotsRef = page.node.get(PDFName.of('Annots'))
+  let annotsArray: PDFArray
+  if (annotsRef instanceof PDFArray) {
+    annotsArray = annotsRef
+  } else if (annotsRef) {
+    const resolved = doc.context.lookup(annotsRef)
+    annotsArray = resolved instanceof PDFArray ? resolved : context.obj([])
+  } else {
+    annotsArray = context.obj([])
+  }
+  annotsArray.push(annotRef)
+  page.node.set(PDFName.of('Annots'), annotsArray)
+
+  return doc.save()
+}
+
+// Write a /Text (sticky note) annotation
+async function addTextAnnotation(
+  pdfBytes: Uint8Array,
+  pageIndex: number,
+  x: number,
+  y: number,
+  contents: string
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes)
+  const page = doc.getPage(pageIndex)
+  const { context } = doc
+
+  const annotDict = context.obj({
+    Type: PDFName.of('Annot'),
+    Subtype: PDFName.of('Text'),
+    Rect: context.obj([x, y, x + 20, y + 20]),
+    Contents: PDFString.of(contents),
+    T: PDFString.of('RefNest'),
+    NM: PDFString.of(`note-${Date.now()}`),
+    M: PDFString.of(new Date().toISOString()),
+    F: PDFNumber.of(4),
+    Open: PDFName.of('false'),
+    Name: PDFName.of('Note'),
+    C: context.obj([1, 0.82, 0]),
+  })
+
+  const annotRef = context.register(annotDict)
+
+  const annotsRef = page.node.get(PDFName.of('Annots'))
+  let annotsArray: PDFArray
+  if (annotsRef instanceof PDFArray) {
+    annotsArray = annotsRef
+  } else if (annotsRef) {
+    const resolved = doc.context.lookup(annotsRef)
+    annotsArray = resolved instanceof PDFArray ? resolved : context.obj([])
+  } else {
+    annotsArray = context.obj([])
+  }
+  annotsArray.push(annotRef)
+  page.node.set(PDFName.of('Annots'), annotsArray)
+
+  return doc.save()
+}
+
 export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
-
-  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null)
   const [numPages, setNumPages] = useState(0)
   const [scale, setScale] = useState(1.5)
   const [tool, setTool] = useState<Tool>('none')
@@ -35,9 +123,11 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
 
   const workerReadyRef = useRef(false)
   const pdfBytesRef = useRef<Uint8Array | null>(null)
-  const viewportsRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map())
-  // ref to current pdfDoc so callbacks don't capture stale closure
+  // The live pdfjs document — always reflects latest bytes
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null)
+  const viewportsRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map())
+  const scaleRef = useRef(scale)
+  useEffect(() => { scaleRef.current = scale }, [scale])
 
   const initWorker = useCallback(async () => {
     if (workerReadyRef.current) return
@@ -48,8 +138,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob)
   }, [])
 
-  // Render one page from a given doc (canvas + TextLayer)
-  // annotationMode=ENABLE so PDF-embedded annotations (highlight, note icons) show on canvas
+  // Render one page onto its canvas (with annotation layer)
   const renderPage = useCallback(async (
     doc: pdfjsLib.PDFDocumentProxy,
     pageNum: number,
@@ -69,97 +158,83 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
       annotationMode: AnnotationMode.ENABLE,
     }).promise
 
+    // TextLayer
     const wrapper = document.getElementById(`pdf-page-${pageNum}`)
     if (!wrapper) return
     wrapper.querySelector('.textLayer')?.remove()
-
     const textDiv = document.createElement('div')
     textDiv.className = 'textLayer'
     textDiv.style.width = `${viewport.width}px`
     textDiv.style.height = `${viewport.height}px`
     wrapper.appendChild(textDiv)
-
-    const textContent = await page.getTextContent()
-    const tl = new TextLayer({ textContentSource: textContent, container: textDiv, viewport })
+    const tl = new TextLayer({
+      textContentSource: await page.getTextContent(),
+      container: textDiv,
+      viewport,
+    })
     await tl.render()
   }, [])
+
+  // Load bytes into a new PDFDocumentProxy, render all pages
+  const loadAndRender = useCallback(async (bytes: Uint8Array) => {
+    pdfBytesRef.current = bytes
+    viewportsRef.current.clear()
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
+    const old = pdfDocRef.current
+    pdfDocRef.current = doc
+    setNumPages(doc.numPages)
+    // render all pages then destroy old doc
+    for (let i = 1; i <= doc.numPages; i++) {
+      await renderPage(doc, i, scaleRef.current)
+    }
+    old?.destroy()
+  }, [renderPage])
+
+  // Re-render only one page from new bytes (fast path after annotation)
+  const rerenderOnePage = useCallback(async (pageNum: number, bytes: Uint8Array) => {
+    pdfBytesRef.current = bytes
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
+    const old = pdfDocRef.current
+    pdfDocRef.current = doc
+    await renderPage(doc, pageNum, scaleRef.current)
+    old?.destroy()
+  }, [renderPage])
 
   // Initial load
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
-
     async function load(): Promise<void> {
       try {
         await initWorker()
         const raw = await window.refnest.fs.readFile(filePath)
         if (cancelled) return
-        const bytes = new Uint8Array(raw)
-        pdfBytesRef.current = bytes
-        viewportsRef.current.clear()
-        const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-        if (cancelled) return
-        pdfDocRef.current = doc
-        setPdfDoc(doc)
-        setNumPages(doc.numPages)
-        setLoading(false)
+        await loadAndRender(new Uint8Array(raw))
+        if (!cancelled) setLoading(false)
       } catch (e) {
         if (!cancelled) { setError(String(e)); setLoading(false) }
       }
     }
     load()
     return () => { cancelled = true }
-  }, [filePath, initWorker])
+  }, [filePath, initWorker, loadAndRender])
 
-  // Re-render all pages when doc first loads or scale changes
+  // Re-render all pages on scale change
   useEffect(() => {
-    if (!pdfDoc) return
+    const doc = pdfDocRef.current
+    if (!doc || loading) return
     viewportsRef.current.clear()
     let cancelled = false
-    async function renderAll(): Promise<void> {
-      for (let i = 1; i <= pdfDoc!.numPages; i++) {
+    async function rerender(): Promise<void> {
+      for (let i = 1; i <= doc!.numPages; i++) {
         if (cancelled) return
-        await renderPage(pdfDoc!, i, scale)
+        await renderPage(doc!, i, scale)
       }
     }
-    renderAll()
+    rerender()
     return () => { cancelled = true }
-  }, [pdfDoc, scale, renderPage])
-
-  // Re-render only one page from fresh bytes after writing an annotation.
-  // Does NOT update pdfDoc state — avoids triggering full re-render.
-  const rerenderPageFromBytes = useCallback(async (pageNum: number, bytes: Uint8Array) => {
-    const tmpDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-    await renderPage(tmpDoc, pageNum, scale)
-    tmpDoc.destroy()
-    // Keep pdfDocRef updated so subsequent annotations parse the correct doc
-    const newDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-    pdfDocRef.current?.destroy()
-    pdfDocRef.current = newDoc
-    setPdfDoc(newDoc)
-  }, [scale, renderPage])
-
-  // Write annotation, save to disk, re-render only the affected page
-  const applyAnnotation = useCallback(async (
-    pageNum: number,
-    mutate: (factory: AnnotationFactory) => void
-  ) => {
-    if (!pdfBytesRef.current) return
-    setSaving(true)
-    try {
-      const factory = new AnnotationFactory(pdfBytesRef.current)
-      mutate(factory)
-      const result = factory.write()
-      await window.refnest.fs.writeFile(filePath, Array.from(result))
-      pdfBytesRef.current = result
-      await rerenderPageFromBytes(pageNum, result)
-    } catch (err) {
-      console.error('[PdfAnnotationViewer] annotation failed:', err)
-    } finally {
-      setSaving(false)
-    }
-  }, [filePath, rerenderPageFromBytes])
+  }, [scale, loading, renderPage])
 
   function pageNumOfNode(node: Node | null): number | null {
     let el = node instanceof Element ? node : node?.parentElement
@@ -189,27 +264,25 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     const range = sel.getRangeAt(0)
     const selRect = range.getBoundingClientRect()
     if (selRect.width < 2 || selRect.height < 2) return
-
     const pageNum = pageNumOfNode(sel.anchorNode)
     if (!pageNum) return
     const viewport = viewportsRef.current.get(pageNum)
     const canvas = document.getElementById(`pdf-canvas-${pageNum}`) as HTMLCanvasElement | null
-    if (!viewport || !canvas) return
-
+    if (!viewport || !canvas || !pdfBytesRef.current) return
     const pdfRect = selectionToPdfRect(viewport, canvas, selRect)
     sel.removeAllRanges()
 
-    await applyAnnotation(pageNum, factory => {
-      factory.createHighlightAnnotation({
-        page: pageNum - 1,
-        rect: pdfRect,
-        contents: '',
-        author: 'RefNest',
-        color: HIGHLIGHT_COLOR,
-        opacity: 0.5,
-      })
-    })
-  }, [tool, applyAnnotation])
+    setSaving(true)
+    try {
+      const newBytes = await addHighlight(pdfBytesRef.current, pageNum - 1, pdfRect)
+      await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
+      await rerenderOnePage(pageNum, newBytes)
+    } catch (err) {
+      console.error('[PdfAnnotationViewer] highlight failed:', err)
+    } finally {
+      setSaving(false)
+    }
+  }, [tool, filePath, rerenderOnePage])
 
   const handlePageClick = useCallback((e: React.MouseEvent, pageNum: number) => {
     if (tool !== 'note') return
@@ -223,17 +296,25 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
   }, [tool])
 
   const confirmNote = useCallback(async () => {
-    if (!pendingNote) return
+    if (!pendingNote || !pdfBytesRef.current) return
     setPendingNote(null)
-    await applyAnnotation(pendingNote.pageNum, factory => {
-      factory.createTextAnnotation({
-        page: pendingNote.pageNum - 1,
-        rect: [pendingNote.pdfX, pendingNote.pdfY, pendingNote.pdfX + 20, pendingNote.pdfY + 20],
-        contents: noteText,
-        author: 'RefNest',
-      })
-    })
-  }, [pendingNote, noteText, applyAnnotation])
+    setSaving(true)
+    try {
+      const newBytes = await addTextAnnotation(
+        pdfBytesRef.current,
+        pendingNote.pageNum - 1,
+        pendingNote.pdfX,
+        pendingNote.pdfY,
+        noteText
+      )
+      await window.refnest.fs.writeFile(filePath, Array.from(newBytes))
+      await rerenderOnePage(pendingNote.pageNum, newBytes)
+    } catch (err) {
+      console.error('[PdfAnnotationViewer] note failed:', err)
+    } finally {
+      setSaving(false)
+    }
+  }, [pendingNote, noteText, filePath, rerenderOnePage])
 
   const btnStyle = (t: Tool): React.CSSProperties => ({
     padding: '4px 10px', borderRadius: 6,
@@ -243,9 +324,9 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
     fontSize: 12, fontWeight: 500, cursor: 'pointer', userSelect: 'none',
   })
 
-  if (error) {
-    return <div style={{ padding: 32, color: 'red', fontSize: 13 }}>PDF 加载失败：{error}</div>
-  }
+  if (error) return (
+    <div style={{ padding: 32, color: 'red', fontSize: 13 }}>PDF 加载失败：{error}</div>
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -280,7 +361,7 @@ export function PdfAnnotationViewer({ filePath }: Props): JSX.Element {
         {loading && (
           <div style={{ textAlign: 'center', color: '#ccc', paddingTop: 60, fontSize: 14 }}>加载中…</div>
         )}
-        {!loading && Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
+        {Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
           <div key={pageNum} style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
             <div
               id={`pdf-page-${pageNum}`}
