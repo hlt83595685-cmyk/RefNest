@@ -107,9 +107,14 @@ export function ToolsDialog({ initialTab = 'pdf2md', onClose }: Props): JSX.Elem
 
 // ── pdf2md tab ────────────────────────────────────────────────────────────────
 
+type Pdf2mdMode = 'agent' | 'precision'
+
 function Pdf2mdTab(): JSX.Element {
   const { t } = useTranslation('common')
   const [enabled, setEnabled] = useState(true)
+  const [mode, setMode] = useState<Pdf2mdMode>('agent')
+  const [token, setToken] = useState('')
+  const [tokenVisible, setTokenVisible] = useState(false)
   const [testPhase, setTestPhase] = useState<TestPhase>('idle')
   const [testMsg, setTestMsg] = useState('')
   const [testOut, setTestOut] = useState<string | null>(null)
@@ -119,12 +124,28 @@ function Pdf2mdTab(): JSX.Element {
     window.refnest.settings.get('tool.pdf2md.enabled').then((v) => {
       if (typeof v === 'boolean') setEnabled(v)
     })
+    window.refnest.settings.get('tool.pdf2md.mode').then((v) => {
+      if (v === 'precision') setMode('precision')
+    })
+    window.refnest.settings.get('tool.pdf2md.apiToken').then((v) => {
+      if (typeof v === 'string') setToken(v)
+    })
   }, [])
 
   const toggleEnabled = (): void => {
     const next = !enabled
     setEnabled(next)
     window.refnest.settings.set('tool.pdf2md.enabled', next)
+  }
+
+  const saveMode = (m: Pdf2mdMode): void => {
+    setMode(m)
+    window.refnest.settings.set('tool.pdf2md.mode', m)
+  }
+
+  const saveToken = (v: string): void => {
+    setToken(v)
+    window.refnest.settings.set('tool.pdf2md.apiToken', v)
   }
 
   const openDocs = (): void => { window.refnest.tools.openExternal(DOCS_URL) }
@@ -184,6 +205,70 @@ function Pdf2mdTab(): JSX.Element {
         {!enabled && (
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
             {t('tools.pdf2md.disabledNote')}
+          </div>
+        )}
+      </Section>
+
+      {/* Mode */}
+      <Section label="解析模式">
+        <div style={{ display: 'flex', gap: 8, marginBottom: mode === 'precision' ? 12 : 0 }}>
+          {([
+            { id: 'agent' as Pdf2mdMode,     label: '免费（Agent）',  desc: '无需 Token，IP 限速，≤20 页/次' },
+            { id: 'precision' as Pdf2mdMode, label: '精准解析 API',  desc: '需要 Token，VLM 模型，输出含图片 Markdown' },
+          ] as { id: Pdf2mdMode; label: string; desc: string }[]).map(({ id, label, desc }) => (
+            <div
+              key={id}
+              onClick={() => saveMode(id)}
+              style={{
+                flex: 1, padding: '8px 12px', borderRadius: 9, cursor: 'pointer',
+                border: mode === id ? '2px solid var(--primary)' : '1px solid var(--border)',
+                background: mode === id ? 'rgba(0,122,255,0.06)' : 'var(--surface)',
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, color: mode === id ? 'var(--primary)' : 'var(--foreground)', marginBottom: 3 }}>
+                {mode === id ? '● ' : '○ '}{label}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>{desc}</div>
+            </div>
+          ))}
+        </div>
+
+        {mode === 'precision' && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              API Token
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type={tokenVisible ? 'text' : 'password'}
+                value={token}
+                onChange={(e) => saveToken(e.target.value)}
+                placeholder="请输入 MinerU API Token"
+                style={{
+                  flex: 1, height: 32, padding: '0 10px',
+                  borderRadius: 7, border: '1px solid var(--border)',
+                  background: 'var(--surface)', color: 'var(--foreground)',
+                  fontSize: 12, outline: 'none',
+                }}
+              />
+              <button
+                onClick={() => setTokenVisible((v) => !v)}
+                style={{ ...secondaryBtnStyle, padding: '0 10px', minWidth: 34 }}
+                title={tokenVisible ? '隐藏' : '显示'}
+              >
+                {tokenVisible ? '🙈' : '👁'}
+              </button>
+            </div>
+            <div style={{ marginTop: 5, fontSize: 11, color: 'var(--muted)' }}>
+              在{' '}
+              <span
+                onClick={() => window.refnest.tools.openExternal('https://mineru.net/apiManage/token')}
+                style={{ color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                MinerU 控制台
+              </span>
+              {' '}获取 Token
+            </div>
           </div>
         )}
       </Section>

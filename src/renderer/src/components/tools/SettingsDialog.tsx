@@ -7,7 +7,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'storage' | 'language' | 'pdf2md'
+type Tab = 'storage' | 'language'
 
 export function SettingsDialog({ initialTab = 'storage', onClose }: Props): JSX.Element {
   const { t } = useTranslation('common')
@@ -22,7 +22,6 @@ export function SettingsDialog({ initialTab = 'storage', onClose }: Props): JSX.
   const tabs: { id: Tab; label: string }[] = [
     { id: 'storage',  label: t('settings.storage.title') },
     { id: 'language', label: t('settings.language.title') },
-    { id: 'pdf2md',   label: 'PDF 转换' },
   ]
 
   return (
@@ -92,7 +91,6 @@ export function SettingsDialog({ initialTab = 'storage', onClose }: Props): JSX.
         <div style={{ padding: '20px 22px 22px', flex: 1, overflow: 'auto' }}>
           {tab === 'storage'  && <StorageTab />}
           {tab === 'language' && <LanguageTab />}
-          {tab === 'pdf2md'   && <Pdf2mdTab />}
         </div>
 
         {/* Footer */}
@@ -197,110 +195,6 @@ function LanguageTab(): JSX.Element {
           ))}
         </div>
       </Section>
-    </div>
-  )
-}
-
-// ── PDF 转换 tab ──────────────────────────────────────────────────────────────
-
-type Pdf2mdMode = 'agent' | 'precision'
-
-function Pdf2mdTab(): JSX.Element {
-  const [mode, setMode] = useState<Pdf2mdMode>('agent')
-  const [token, setToken] = useState('')
-  const [tokenVisible, setTokenVisible] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    window.refnest.settings.get('tool.pdf2md.mode').then((v) => {
-      if (v === 'precision') setMode('precision')
-    })
-    window.refnest.settings.get('tool.pdf2md.apiToken').then((v) => {
-      if (typeof v === 'string') setToken(v)
-    })
-  }, [])
-
-  const save = async (): Promise<void> => {
-    await window.refnest.settings.set('tool.pdf2md.mode', mode)
-    await window.refnest.settings.set('tool.pdf2md.apiToken', token)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Section label="解析模式">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Mode selector */}
-          <div style={{ display: 'flex', gap: 10 }}>
-            {([
-              { id: 'agent' as Pdf2mdMode, label: '免费（Agent 轻量解析）', desc: '无需 Token，基于 IP 限速，每次最多 20 页' },
-              { id: 'precision' as Pdf2mdMode, label: '精准解析 API', desc: '需要 Bearer Token，使用 VLM 模型，输出含图片的多模态 Markdown' },
-            ] as { id: Pdf2mdMode; label: string; desc: string }[]).map(({ id, label, desc }) => (
-              <div
-                key={id}
-                onClick={() => setMode(id)}
-                style={{
-                  flex: 1, padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
-                  border: mode === id ? '2px solid var(--primary)' : '1px solid var(--border)',
-                  background: mode === id ? 'rgba(0,122,255,0.06)' : 'var(--surface)',
-                }}
-              >
-                <div style={{ fontSize: 13, fontWeight: 600, color: mode === id ? 'var(--primary)' : 'var(--foreground)', marginBottom: 4 }}>
-                  {mode === id ? '● ' : '○ '}{label}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>{desc}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Token input — only when precision mode */}
-          {mode === 'precision' && (
-            <div style={{ marginTop: 4 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                API Token
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  type={tokenVisible ? 'text' : 'password'}
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="请输入 MinerU API Token"
-                  style={{
-                    flex: 1, height: 34, padding: '0 10px',
-                    borderRadius: 8, border: '1px solid var(--border)',
-                    background: 'var(--surface)', color: 'var(--foreground)',
-                    fontSize: 13, outline: 'none',
-                    fontFamily: tokenVisible ? 'inherit' : 'monospace',
-                  }}
-                />
-                <button
-                  onClick={() => setTokenVisible((v) => !v)}
-                  style={{ ...secondaryBtnStyle, padding: '0 10px', minWidth: 36 }}
-                  title={tokenVisible ? '隐藏' : '显示'}
-                >
-                  {tokenVisible ? '🙈' : '👁'}
-                </button>
-              </div>
-              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
-                在{' '}
-                <span
-                  onClick={() => window.refnest.tools.openExternal('https://mineru.net/apiManage/token')}
-                  style={{ color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  MinerU 控制台
-                </span>
-                {' '}获取 Token
-              </div>
-            </div>
-          )}
-        </div>
-      </Section>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
-        {saved && <span style={{ fontSize: 12, color: '#34c759' }}>✓ 已保存</span>}
-        <button onClick={save} style={primaryBtnStyle}>保存</button>
-      </div>
     </div>
   )
 }
