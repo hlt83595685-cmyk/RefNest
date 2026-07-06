@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import rehypeRaw from 'rehype-raw'
+import 'katex/dist/katex.min.css'
 import { dirname, join } from 'path-browserify'
 
 interface Props {
@@ -128,7 +132,8 @@ export function MarkdownViewer({ filePath }: Props): JSX.Element {
       color: 'var(--foreground)',
     }}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex, rehypeRaw]}
         components={{
           // Load local images via IPC → blob URL (bypasses all CSP/protocol issues)
           img({ src, alt }) {
