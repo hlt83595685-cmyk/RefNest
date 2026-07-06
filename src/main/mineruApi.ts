@@ -113,81 +113,75 @@ async function agentPollResult(taskId: string): Promise<string> {
  * Step 1: get a pre-signed upload URL + the resulting public file URL.
  * Uses the batch file-url endpoint with a single file entry.
  */
-async function precisionGetUploadUrl(
+/**
+ * Step 1: POST /api/v4/file-urls/batch
+ * Returns { batchId, uploadUrl } where uploadUrl is the OSS pre-signed PUT URL.
+ * The batch endpoint automatically submits the parse task once the file is uploaded.
+ */
+async function precisionBatchSubmit(
   fileName: string,
   token: string
-): Promise<{ uploadUrl: string; fileUrl: string }> {
+): Promise<{ batchId: string; uploadUrl: string }> {
   const resp = await fetchJson(`${PRECISION_BASE}/file-urls/batch`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ files: [{ name: fileName, size: 0 }] }),
-  }) as {
-    code: number
-    msg: string
-    data: { file_urls: Array<{ upload_url: string; url: string }> }
-  }
-  if (resp.code !== 0) throw new Error(`MinerU file-url error: ${resp.msg}`)
-  const entry = resp.data.file_urls[0]
-  if (!entry) throw new Error('No file_url returned from MinerU')
-  return { uploadUrl: entry.upload_url, fileUrl: entry.url }
-}
-
-/** Step 2: Upload the file bytes to the pre-signed URL. */
-async function precisionUploadFile(filePath: string, uploadUrl: string): Promise<void> {
-  const fileBuffer = readFileSync(filePath)
-  const resp = await fetch(uploadUrl, {
-    method: 'PUT',
-    body: fileBuffer,
-    headers: { 'Content-Type': 'application/octet-stream' },
-  })
-  if (!resp.ok) throw new Error(`Precision upload failed: HTTP ${resp.status}`)
-}
-
-/** Step 3: Create a precision parse task. */
-async function precisionCreateTask(
-  fileUrl: string,
-  token: string
-): Promise<string> {
-  const resp = await fetchJson(`${PRECISION_BASE}/extract/task`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
     body: JSON.stringify({
-      url: fileUrl,
+      files: [{ name: fileName }],
       model_version: 'vlm',
-      is_ocr: false,
       enable_formula: true,
       enable_table: true,
       language: 'ch',
     }),
-  }) as { code: number; msg: string; data: { task_id: string } }
-  if (resp.code !== 0) throw new Error(`MinerU precision task error: ${resp.msg}`)
-  return resp.data.task_id
+  }) as {
+    code: number
+    msg: string
+    data: { batch_id: string; file_urls: string[] }
+  }
+  if (resp.code !== 0) throw new Error(`MinerU batch submit error (${resp.code}): ${resp.msg}`)
+  const uploadUrl = resp.data.file_urls?.[0]
+  if (!uploadUrl) throw new Error('No upload URL returned from MinerU')
+  return { batchId: resp.data.batch_id, uploadUrl }
 }
 
-/** Step 4: Poll until done, return the zip download URL. */
-async function precisionPollResult(taskId: string, token: string): Promise<string> {
+/** Step 2: PUT file to OSS pre-signed URL. Must NOT send Content-Type header. */
+async function precisionUploadFile(filePath: string, uploadUrl: string): Promise<void> {
+  const fileBuffer = readFileSync(filePath)
+  const resp = await fetch(uploadUrl, { method: 'PUT', body: fileBuffer })
+  if (!resp.ok) throw new Error(`Upload failed: HTTP ${resp.status}`)
+}
+
+/** Step 3: Poll GET /api/v4/extract-results/batch/{batch_id} until done. Returns zip URL. */
+async function precisionPollBatch(batchId: string, token: string): Promise<string> {
   for (let i = 0; i < 240; i++) {
     await sleep(5000)
-    const resp = await fetchJson(`${PRECISION_BASE}/extract/task/${taskId}`, {
+    const resp = await fetchJson(`${PRECISION_BASE}/extract-results/batch/${batchId}`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
     }) as {
       code: number; msg: string
-      data: { state: string; zip_url?: string; err_msg?: string }
+      data: {
+        batch_id: string
+        extract_result: Array<{
+          file_name: string
+          state: string
+          err_msg?: string
+          full_zip_url?: string
+        }>
+      }
     }
     if (resp.code !== 0) throw new Error(`Precision poll error: ${JSON.stringify(resp)}`)
-    const { state, zip_url, err_msg } = resp.data
+    const result = resp.data.extract_result?.[0]
+    if (!result) continue
+    const { state, full_zip_url, err_msg } = result
     if (state === 'done') {
-      if (!zip_url) throw new Error('No zip_url in precision result')
-      return zip_url
+      if (!full_zip_url) throw new Error('No full_zip_url in precision result')
+      return full_zip_url
     }
     if (state === 'failed') throw new Error(`Precision task failed: ${err_msg ?? 'unknown'}`)
+    // states: waiting-file, pending, running, converting — keep polling
   }
   throw new Error('Timeout waiting for MinerU precision result (20 min)')
 }
@@ -318,16 +312,13 @@ export async function convertPdfToMarkdownPrecision(
   const fileName = basename(filePath)
 
   onProgress?.({ state: 'pending', message: '获取上传地址...' })
-  const { uploadUrl, fileUrl } = await precisionGetUploadUrl(fileName, token)
+  const { batchId, uploadUrl } = await precisionBatchSubmit(fileName, token)
 
   onProgress?.({ state: 'running', message: '上传 PDF...' })
   await precisionUploadFile(filePath, uploadUrl)
 
-  onProgress?.({ state: 'running', message: '提交精准解析任务...' })
-  const taskId = await precisionCreateTask(fileUrl, token)
-
-  onProgress?.({ state: 'running', message: '精准解析中（使用 VLM 模型，速度较慢）...' })
-  const zipUrl = await precisionPollResult(taskId, token)
+  onProgress?.({ state: 'running', message: '精准解析中（VLM 模型，速度较慢）...' })
+  const zipUrl = await precisionPollBatch(batchId, token)
 
   onProgress?.({ state: 'running', message: '下载并解压结果...' })
   const mdPath = await precisionExtractZip(zipUrl, outputDir, stem)
