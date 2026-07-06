@@ -1,26 +1,77 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { dirname, join, isAbsolute } from 'path-browserify'
+import { dirname, join } from 'path-browserify'
 
 interface Props {
   filePath: string
 }
 
-// Convert a src attribute (possibly relative) to a refnest-file:// URL the renderer can load.
-// file:// is blocked in Electron renderer; refnest-file:// is registered as a privileged scheme.
+// path-browserify's isAbsolute is POSIX-only (checks leading /).
+// Add Windows absolute path detection (C:/... D:/... etc.).
+function isAbsolutePath(p: string): boolean {
+  const n = p.replace(/\\/g, '/')
+  return n.startsWith('/') || /^[A-Za-z]:\//.test(n)
+}
+
+// Convert any image src to a refnest-file:// URL.
+// file:// is blocked in Electron renderer; refnest-file:// is a registered privileged scheme.
 function resolveImageSrc(src: string, mdDir: string): string {
-  if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://') || src.startsWith('refnest-file://')) {
-    return src
-  }
-  // Absolute Windows/POSIX path
+  if (
+    src.startsWith('data:') ||
+    src.startsWith('http://') ||
+    src.startsWith('https://') ||
+    src.startsWith('refnest-file://')
+  ) return src
+
   const normalised = src.replace(/\\/g, '/')
-  if (isAbsolute(normalised)) {
+  if (isAbsolutePath(normalised)) {
     return `refnest-file:///${normalised}`
   }
-  // Relative path — join with .md file's directory
+  // Relative — join with .md directory
   const abs = join(mdDir, src).replace(/\\/g, '/')
   return `refnest-file:///${abs}`
+}
+
+// Image component: resolve path → load via IPC as blob URL to guarantee delivery.
+// Falls back to refnest-file:// URL if IPC fails.
+function LocalImage({ src, alt, mdDir }: { src?: string; alt?: string; mdDir: string }): JSX.Element {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const blobRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!src) return
+    const resolved = resolveImageSrc(src, mdDir)
+    // Extract absolute file path from refnest-file:/// URL for IPC read
+    let filePath = resolved
+    if (filePath.startsWith('refnest-file:///')) {
+      filePath = decodeURIComponent(filePath.slice('refnest-file:///'.length))
+      // On Windows the path is already like C:/... — keep as-is
+    }
+    window.refnest.fs.readFile(filePath)
+      .then((bytes) => {
+        const ext = filePath.split('.').pop()?.toLowerCase() ?? 'png'
+        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+          : ext === 'gif' ? 'image/gif'
+          : ext === 'svg' ? 'image/svg+xml'
+          : ext === 'webp' ? 'image/webp'
+          : 'image/png'
+        const blob = new Blob([new Uint8Array(bytes)], { type: mime })
+        const url = URL.createObjectURL(blob)
+        blobRef.current = url
+        setBlobUrl(url)
+      })
+      .catch(() => {
+        // Fallback: use the refnest-file:// URL directly
+        setBlobUrl(resolved)
+      })
+    return () => {
+      if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null }
+    }
+  }, [src, mdDir])
+
+  if (!blobUrl) return <span style={{ color: 'var(--muted)', fontSize: 11 }}>[图片加载中…]</span>
+  return <img src={blobUrl} alt={alt ?? ''} style={{ maxWidth: '100%', borderRadius: 6, margin: '8px 0' }} />
 }
 
 export function MarkdownViewer({ filePath }: Props): JSX.Element {
@@ -66,17 +117,9 @@ export function MarkdownViewer({ filePath }: Props): JSX.Element {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // Resolve local image paths to file:// URLs
-          img({ src, alt, ...rest }) {
-            const resolved = src ? resolveImageSrc(src, mdDir) : undefined
-            return (
-              <img
-                {...rest}
-                src={resolved}
-                alt={alt ?? ''}
-                style={{ maxWidth: '100%', borderRadius: 6, margin: '8px 0' }}
-              />
-            )
+          // Load local images via IPC → blob URL (bypasses all CSP/protocol issues)
+          img({ src, alt }) {
+            return <LocalImage src={src} alt={alt} mdDir={mdDir} />
           },
           // Open links externally
           a({ href, children, ...rest }) {
