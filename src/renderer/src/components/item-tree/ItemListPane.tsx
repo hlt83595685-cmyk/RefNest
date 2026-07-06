@@ -49,7 +49,8 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
       {/* Title + tags */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
-          fontSize: 13,
+          fontSize: 18,
+          fontFamily: '"Times New Roman", "Georgia", "Palatino Linotype", serif',
           fontWeight: selected ? 600 : 500,
           color: selected ? 'var(--primary)' : 'var(--foreground)',
           overflow: 'hidden',
@@ -66,16 +67,13 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
                 display: 'inline-block',
                 padding: '2px 8px',
                 borderRadius: 4,
-                fontSize: 10.5,
-                fontFamily: 'Cambria, "Times New Roman", Georgia, serif',
-                fontStyle: 'italic',
-                fontWeight: 400,
-                letterSpacing: '0.01em',
-                background: selected
-                  ? 'rgba(0,122,255,0.12)'
-                  : 'rgba(60,60,67,0.06)',
-                color: selected ? 'var(--primary)' : 'var(--foreground-2)',
-                border: `1px solid ${selected ? 'rgba(0,122,255,0.22)' : 'rgba(60,60,67,0.14)'}`,
+                fontSize: 14,
+                fontFamily: '"Adobe Gothic Std B", "Adobe Gothic Std", "Source Han Sans", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif',
+                fontWeight: 700,
+                letterSpacing: '0.02em',
+                background: 'rgba(102,8,116,0.07)',
+                color: '#660874',
+                border: '1px solid rgba(102,8,116,0.20)',
                 lineHeight: 1.7,
                 whiteSpace: 'nowrap',
               }}>
@@ -84,8 +82,9 @@ function ItemRow({ item, selected, onClick, onDoubleClick, onContextMenu }: {
             ))}
             {item.tags.length > 6 && (
               <span style={{
-                fontSize: 10, color: 'var(--muted-2)', lineHeight: 1.7,
-                alignSelf: 'center', fontFamily: 'Cambria, serif',
+                fontSize: 12, color: '#660874', lineHeight: 1.7,
+                alignSelf: 'center', opacity: 0.6,
+                fontFamily: '"Adobe Gothic Std B", sans-serif',
               }}>
                 +{item.tags.length - 6}
               </span>

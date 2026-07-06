@@ -228,32 +228,78 @@ export async function importPDF(filePath: string, collectionId?: number): Promis
   return 1
 }
 
+// ── Keyword extraction from Markdown text ────────────────────────────────────
+
+function extractKeywordsFromMarkdown(md: string): string[] {
+  // Normalise line endings
+  const text = md.replace(/\r\n?/g, '\n')
+
+  // Patterns to try, in priority order:
+  // 1. Bold inline header:  **Keywords**: ... or **关键词**: ...
+  // 2. Plain inline header: Keywords: ...  / Index Terms: ...  / 关键词: ...
+  // 3. Markdown heading block:
+  //      ## Keywords
+  //      word1; word2
+
+  const inlineBold = text.match(
+    /\*{1,2}(?:keywords?|key\s*words?|index\s+terms?|关键词)\*{1,2}\s*[：:]\s*(.{4,400}?)(?:\n\n|\n#|$)/i
+  )
+  if (inlineBold) return splitKeywords(inlineBold[1])
+
+  const inlinePlain = text.match(
+    /(?:^|\n)(?:keywords?|key\s*words?|index\s+terms?|关键词)\s*[：:]\s*(.{4,400}?)(?:\n\n|\n#|$)/i
+  )
+  if (inlinePlain) return splitKeywords(inlinePlain[1])
+
+  // Heading block: ## Keywords\n...\n\n
+  const headingBlock = text.match(
+    /#{1,4}\s*(?:keywords?|key\s*words?|index\s+terms?|关键词)\s*\n+([\s\S]{4,400}?)(?:\n\n|\n#|$)/i
+  )
+  if (headingBlock) return splitKeywords(headingBlock[1])
+
+  return []
+}
+
 // ── On-demand extraction for existing items ──────────────────────────────────
 
 export async function extractKeywordsForItem(itemId: number): Promise<{ added: number; total: number }> {
   const attachments = getAttachmentsByItem(itemId)
-  const pdfs = attachments.filter(
-    (a) => a.path && (a.mime_type === 'application/pdf' || a.filename?.toLowerCase().endsWith('.pdf'))
-  )
-  if (!pdfs.length) return { added: 0, total: 0 }
 
-  // Collect keywords from all PDF attachments
   const found = new Set<string>()
-  for (const att of pdfs) {
+
+  // Prefer markdown attachments — MinerU output is cleaner and better structured
+  const mds = attachments.filter(
+    (a) => a.path && (a.mime_type === 'text/markdown' || a.filename?.toLowerCase().endsWith('.md'))
+  )
+  for (const att of mds) {
     try {
-      const text = await extractPdfText(att.path!)
-      const kws = extractKeywordsFromText(text)
-      console.log(`[pdfImporter] extractKeywordsForItem(${itemId}): found ${kws.length} keyword(s):`, kws)
+      const mdText = readFileSync(att.path!, 'utf-8')
+      const kws = extractKeywordsFromMarkdown(mdText)
+      console.log(`[pdfImporter] extractKeywordsForItem(${itemId}): markdown found ${kws.length} keyword(s):`, kws)
       for (const kw of kws) found.add(kw)
     } catch (err) {
-      console.warn(`[pdfImporter] extractKeywordsForItem(${itemId}): text extraction failed`, err)
+      console.warn(`[pdfImporter] extractKeywordsForItem(${itemId}): markdown read failed`, err)
     }
   }
 
+  // Fall back to PDF text extraction if no keywords found from markdown
   if (!found.size) {
-    console.log(`[pdfImporter] extractKeywordsForItem(${itemId}): no keywords found in ${pdfs.length} PDF(s)`)
-    return { added: 0, total: 0 }
+    const pdfs = attachments.filter(
+      (a) => a.path && (a.mime_type === 'application/pdf' || a.filename?.toLowerCase().endsWith('.pdf'))
+    )
+    for (const att of pdfs) {
+      try {
+        const text = await extractPdfText(att.path!)
+        const kws = extractKeywordsFromText(text)
+        console.log(`[pdfImporter] extractKeywordsForItem(${itemId}): PDF found ${kws.length} keyword(s):`, kws)
+        for (const kw of kws) found.add(kw)
+      } catch (err) {
+        console.warn(`[pdfImporter] extractKeywordsForItem(${itemId}): PDF text extraction failed`, err)
+      }
+    }
   }
+
+  if (!found.size) return { added: 0, total: 0 }
 
   // Merge with existing tags (don't overwrite custom ones)
   const existing = getTagsByItem(itemId).map((t) => t.name)
