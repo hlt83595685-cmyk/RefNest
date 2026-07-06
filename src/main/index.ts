@@ -122,8 +122,10 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.refnest.app')
 
   protocol.handle('refnest-file', (request) => {
-    // URL format: refnest-file:///C:/path/to/file.pdf
-    const filePath = decodeURIComponent(request.url.replace('refnest-file://', ''))
+    // URL format: refnest-file:///C:/path/to/file  (triple slash + drive letter on Windows)
+    // Stripping the scheme leaves /C:/path — strip the leading / on Windows absolute paths.
+    let filePath = decodeURIComponent(request.url.replace('refnest-file://', ''))
+    if (/^\/[A-Za-z]:/.test(filePath)) filePath = filePath.slice(1)
     return net.fetch(pathToFileURL(filePath).toString())
   })
 

@@ -7,18 +7,20 @@ interface Props {
   filePath: string
 }
 
-// Convert a src attribute (possibly relative) to a file:// URL the renderer can load.
+// Convert a src attribute (possibly relative) to a refnest-file:// URL the renderer can load.
+// file:// is blocked in Electron renderer; refnest-file:// is registered as a privileged scheme.
 function resolveImageSrc(src: string, mdDir: string): string {
-  if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://')) {
+  if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://') || src.startsWith('refnest-file://')) {
     return src
   }
-  // Absolute path
-  if (isAbsolute(src)) {
-    return `file:///${src.replace(/\\/g, '/')}`
+  // Absolute Windows/POSIX path
+  const normalised = src.replace(/\\/g, '/')
+  if (isAbsolute(normalised)) {
+    return `refnest-file:///${normalised}`
   }
-  // Relative path — join with .md file directory
+  // Relative path — join with .md file's directory
   const abs = join(mdDir, src).replace(/\\/g, '/')
-  return `file:///${abs}`
+  return `refnest-file:///${abs}`
 }
 
 export function MarkdownViewer({ filePath }: Props): JSX.Element {

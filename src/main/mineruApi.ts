@@ -226,17 +226,16 @@ async function precisionExtractZip(
 
   if (!markdownContent) throw new Error('full.md not found in MinerU zip')
 
-  // Rewrite relative image references in markdown to point to imagesDir
-  // MinerU typically uses paths like "images/xxx.png" in full.md
-  const imagesRelDir = `${stem}_images`
+  // Rewrite all relative image references to absolute forward-slash paths.
+  // The MarkdownViewer will prefix these with refnest-file:/// for Electron rendering.
   markdownContent = markdownContent.replace(
-    /!\[([^\]]*)\]\((?!https?:\/\/)([^)]+)\)/g,
+    /!\[([^\]]*)\]\((?!https?:\/\/)(?!refnest-file:\/\/)([^)]+)\)/g,
     (match, alt, src) => {
       const imgBasename = basename(src)
       const candidate = join(imagesDir, imgBasename)
       if (existsSync(candidate)) {
-        // Use forward slashes, the viewer will convert to file:// URL
-        return `![${alt}](${imagesRelDir}/${imgBasename})`
+        // Write absolute forward-slash path so viewer can build refnest-file:// URL
+        return `![${alt}](${candidate.replace(/\\/g, '/')})`
       }
       return match
     }
