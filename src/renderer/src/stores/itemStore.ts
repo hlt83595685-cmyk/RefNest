@@ -1,21 +1,25 @@
 import { create } from 'zustand'
 import type { Item } from '../../../shared/types'
 
+type ViewerType = 'pdf' | 'markdown'
+
 interface ItemStore {
   items: Item[]
   selectedId: number | null
   activeCollection: string
   searchQuery: string
   yearSort: 'none' | 'desc'
-  // PDF viewer state
+  // Viewer state (PDF or Markdown)
   viewerPath: string | null
   viewerFilename: string | null
+  viewerType: ViewerType
   loadItems: () => Promise<void>
   setSelectedId: (id: number | null) => void
   setActiveCollection: (id: string) => void
   setSearchQuery: (q: string) => void
   toggleYearSort: () => void
   openPdf: (path: string, filename: string) => void
+  openMarkdown: (path: string, filename: string) => void
   closePdf: () => void
 }
 
@@ -27,6 +31,7 @@ export const useItemStore = create<ItemStore>((set) => ({
   yearSort: 'none',
   viewerPath: null,
   viewerFilename: null,
+  viewerType: 'pdf',
 
   loadItems: async () => {
     try {
@@ -56,6 +61,7 @@ export const useItemStore = create<ItemStore>((set) => ({
   },
   setSearchQuery: (q) => set({ searchQuery: q }),
   toggleYearSort: () => set((s) => ({ yearSort: s.yearSort === 'desc' ? 'none' : 'desc' })),
-  openPdf: (path, filename) => set({ viewerPath: path, viewerFilename: filename }),
+  openPdf: (path, filename) => set({ viewerPath: path, viewerFilename: filename, viewerType: 'pdf' }),
+  openMarkdown: (path, filename) => set({ viewerPath: path, viewerFilename: filename, viewerType: 'markdown' }),
   closePdf: () => set({ viewerPath: null, viewerFilename: null }),
 }))

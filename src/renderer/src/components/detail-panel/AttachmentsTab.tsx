@@ -5,7 +5,7 @@ import { useItemStore } from '../../stores/itemStore'
 
 export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
   const { t } = useTranslation('common')
-  const { openPdf } = useItemStore()
+  const { openPdf, openMarkdown } = useItemStore()
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -42,10 +42,15 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
   }
 
   const handleOpen = async (att: Attachment): Promise<void> => {
-    const isPdf = att.mime_type === 'application/pdf' || att.filename?.toLowerCase().endsWith('.pdf')
-    if (isPdf) {
+    const name = att.filename?.toLowerCase() ?? ''
+    const isPdf = att.mime_type === 'application/pdf' || name.endsWith('.pdf')
+    const isMd  = att.mime_type === 'text/markdown' || name.endsWith('.md')
+
+    if (isPdf || isMd) {
       const path = await window.refnest.attachments.getPath(att.id)
-      if (path) openPdf(path, att.filename ?? 'document.pdf')
+      if (!path) return
+      if (isMd) openMarkdown(path, att.filename ?? 'document.md')
+      else       openPdf(path, att.filename ?? 'document.pdf')
     } else {
       await window.refnest.attachments.openExternal(att.id)
     }

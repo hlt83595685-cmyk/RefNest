@@ -2,7 +2,7 @@ import { join, dirname, basename } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { app, BrowserWindow } from 'electron'
 import { registerAttachment, getAttachmentsByItem } from './db/attachments'
-import { convertPdfToMarkdownAuto } from './mineruApi'
+import { convertPdfToMarkdownAuto, convertPdfToMarkdownPrecision } from './mineruApi'
 
 // ── Window reference ──────────────────────────────────────────────────────────
 
@@ -53,6 +53,16 @@ export function isPdf2mdEnabled(): boolean {
   return loadSettings()['tool.pdf2md.enabled'] !== false
 }
 
+export function getPdf2mdMode(): 'agent' | 'precision' {
+  const v = loadSettings()['tool.pdf2md.mode']
+  return v === 'precision' ? 'precision' : 'agent'
+}
+
+export function getPdf2mdApiToken(): string {
+  const v = loadSettings()['tool.pdf2md.apiToken']
+  return typeof v === 'string' ? v : ''
+}
+
 export function getStoragePath(): string | null {
   const v = loadSettings()['storage.path']
   return typeof v === 'string' && v ? v : null
@@ -97,11 +107,24 @@ async function runConversion(job: QueueItem): Promise<void> {
   push('running', '准备中...')
 
   try {
-    const outPath = await convertPdfToMarkdownAuto(pdfPath, (p) => {
-      const msg = p.message ?? p.state
-      console.log(`[pdf2md]${p.chunk ? ` [${p.chunk}]` : ''} ${msg}`)
-      push('running', msg, p.chunk)
-    }, outputPath)
+    const mode = getPdf2mdMode()
+    const token = getPdf2mdApiToken()
+
+    let outPath: string
+    if (mode === 'precision') {
+      if (!token) throw new Error('精准解析模式需要填写 API Token（请前往设置 → PDF 转换）')
+      outPath = await convertPdfToMarkdownPrecision(pdfPath, token, (p) => {
+        const msg = p.message ?? p.state
+        console.log(`[pdf2md:precision]${p.chunk ? ` [${p.chunk}]` : ''} ${msg}`)
+        push('running', msg, p.chunk)
+      }, outputPath)
+    } else {
+      outPath = await convertPdfToMarkdownAuto(pdfPath, (p) => {
+        const msg = p.message ?? p.state
+        console.log(`[pdf2md]${p.chunk ? ` [${p.chunk}]` : ''} ${msg}`)
+        push('running', msg, p.chunk)
+      }, outputPath)
+    }
     registerAttachment(itemId, outPath)
     console.log(`[pdf2md] Done: ${outPath}`)
     push('done', '转换完成')

@@ -5,6 +5,7 @@ import { CollectionPane } from '../item-tree/CollectionPane'
 import { ItemListPane } from '../item-tree/ItemListPane'
 import { DetailPane } from '../detail-panel/DetailPane'
 import { PdfReaderPane } from '../pdf-viewer/PdfReaderPane'
+import { MarkdownReaderPane } from '../pdf-viewer/MarkdownReaderPane'
 import { useItemStore } from '../../stores/itemStore'
 
 export function MainLayout(): JSX.Element {
@@ -12,6 +13,7 @@ export function MainLayout(): JSX.Element {
   const [detailWidth] = useState(320)
   const selectedId = useItemStore((s) => s.selectedId)
   const viewerPath = useItemStore((s) => s.viewerPath)
+  const viewerType = useItemStore((s) => s.viewerType)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
@@ -38,7 +40,12 @@ export function MainLayout(): JSX.Element {
           background: 'var(--bg-elevated)',
           borderRight: selectedId !== null && !viewerPath ? '1px solid var(--separator)' : 'none',
         }}>
-          {viewerPath ? <PdfReaderPane /> : <ItemListPane />}
+          {viewerPath
+            ? viewerType === 'markdown'
+              ? <MarkdownReaderPane />
+              : <PdfReaderPane />
+            : <ItemListPane />
+          }
         </main>
 
         {/* Right detail — hidden during PDF reading */}

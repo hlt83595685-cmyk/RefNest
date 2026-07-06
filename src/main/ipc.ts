@@ -1,7 +1,7 @@
 import { IpcMain, dialog, shell, BrowserWindow } from 'electron'
 import { readFileSync, writeFileSync } from 'fs'
 import { convertPdfToMarkdown } from './mineruApi'
-import { saveSettings, isPdf2mdEnabled, getStoragePath, saveStoragePath, manualConvertPdfToMd } from './pdf2mdService'
+import { saveSettings, isPdf2mdEnabled, getStoragePath, saveStoragePath, manualConvertPdfToMd, getPdf2mdMode, getPdf2mdApiToken } from './pdf2mdService'
 import {
   getAllItems, getTrashedItems, getItemById,
   getAllItemsWithTags, getItemsByCollectionWithTags,
@@ -124,6 +124,8 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   // Settings sync
   ipcMain.handle('settings:get', (_e, key: string) => {
     if (key === 'tool.pdf2md.enabled') return isPdf2mdEnabled()
+    if (key === 'tool.pdf2md.mode') return getPdf2mdMode()
+    if (key === 'tool.pdf2md.apiToken') return getPdf2mdApiToken()
     if (key === 'storage.path') return getStoragePath()
     return null
   })
@@ -180,6 +182,9 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('fs:readFile', (_e, filePath: string) => {
     const buf = readFileSync(filePath)
     return Array.from(buf)
+  })
+  ipcMain.handle('fs:readTextFile', (_e, filePath: string) => {
+    return readFileSync(filePath, 'utf-8')
   })
   ipcMain.handle('fs:writeFile', (_e, filePath: string, data: number[]) => {
     writeFileSync(filePath, Buffer.from(data))
