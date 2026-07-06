@@ -61,16 +61,27 @@ function LocalImage({ src, alt, mdDir }: { src?: string; alt?: string; mdDir: st
         blobRef.current = url
         setBlobUrl(url)
       })
-      .catch(() => {
-        // Fallback: use the refnest-file:// URL directly
-        setBlobUrl(resolved)
+      .catch((err) => {
+        console.error('[MarkdownViewer] readFile failed:', filePath, err)
+        setBlobUrl('__error__')
       })
     return () => {
       if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null }
     }
   }, [src, mdDir])
 
-  if (!blobUrl) return <span style={{ color: 'var(--muted)', fontSize: 11 }}>[图片加载中…]</span>
+  if (!blobUrl) return <span style={{ color: 'var(--muted)', fontSize: 11 }}>[…]</span>
+  if (blobUrl === '__error__') {
+    return (
+      <span title={src ?? ''} style={{
+        display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+        background: 'var(--surface-2)', border: '1px solid var(--border)',
+        color: 'var(--muted)', fontSize: 11, fontFamily: 'monospace',
+      }}>
+        ⚠ {src?.split('/').pop() ?? 'image'}
+      </span>
+    )
+  }
   return <img src={blobUrl} alt={alt ?? ''} style={{ maxWidth: '100%', borderRadius: 6, margin: '8px 0' }} />
 }
 
@@ -78,7 +89,9 @@ export function MarkdownViewer({ filePath }: Props): JSX.Element {
   const [content, setContent] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const mdDir = dirname(filePath).replace(/\\/g, '/')
+  // Normalise to forward slashes BEFORE dirname — path-browserify uses POSIX rules
+  // and returns '.' for paths that contain only backslashes (Windows default).
+  const mdDir = dirname(filePath.replace(/\\/g, '/'))
 
   useEffect(() => {
     setContent(null)
