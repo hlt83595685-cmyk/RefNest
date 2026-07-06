@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'fs'
-import { basename, join, dirname, extname } from 'path'
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
+import { basename, join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { PDFDocument } from 'pdf-lib'
@@ -201,50 +201,31 @@ async function precisionExtractZip(
   const zipBuf = Buffer.from(await resp.arrayBuffer())
 
   const zip = new AdmZip(zipBuf)
-  const entries = zip.getEntries()
 
-  // Ensure output images dir exists
-  const imagesDir = join(outputDir, `${stem}_images`)
-  mkdirSync(imagesDir, { recursive: true })
+  // Extract entire zip into stem_mineru/ preserving the original directory structure.
+  // This keeps relative image paths in full.md intact — no rewriting needed.
+  const extractDir = join(outputDir, `${stem}_mineru`)
+  mkdirSync(extractDir, { recursive: true })
+  zip.extractAllTo(extractDir, /* overwrite */ true)
 
-  let markdownContent = ''
+  // Locate full.md — it may be at the root or inside a subdirectory
+  const mdPath = findFile(extractDir, 'full.md')
+  if (!mdPath) throw new Error('full.md not found in MinerU zip')
+  return mdPath
+}
 
-  for (const entry of entries) {
-    if (entry.isDirectory) continue
-    const entryName = entry.entryName  // e.g. "full.md" or "images/figure_1.png"
-    const entryBasename = basename(entryName)
-    const ext = extname(entryName).toLowerCase()
-
-    if (entryBasename === 'full.md') {
-      markdownContent = entry.getData().toString('utf-8')
-    } else if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) {
-      // Save images into stem_images/
-      const imgPath = join(imagesDir, entryBasename)
-      writeFileSync(imgPath, entry.getData())
+function findFile(dir: string, name: string): string | null {
+  const { readdirSync, statSync } = require('fs') as typeof import('fs')
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry)
+    if (statSync(full).isDirectory()) {
+      const found = findFile(full, name)
+      if (found) return found
+    } else if (entry === name) {
+      return full
     }
   }
-
-  if (!markdownContent) throw new Error('full.md not found in MinerU zip')
-
-  // Rewrite relative image references to stem_images/basename — a path that is:
-  //  - valid for external markdown viewers (relative to the .md file)
-  //  - resolvable by MarkdownViewer via join(mdDir, relPath) → IPC readFile
-  const imagesRelDir = `${stem}_images`
-  markdownContent = markdownContent.replace(
-    /!\[([^\]]*)\]\((?!https?:\/\/)([^)]+)\)/g,
-    (match, alt, src) => {
-      const imgBasename = basename(src)
-      const candidate = join(imagesDir, imgBasename)
-      if (existsSync(candidate)) {
-        return `![${alt}](${imagesRelDir}/${imgBasename})`
-      }
-      return match
-    }
-  )
-
-  const mdPath = join(outputDir, `${stem}.md`)
-  writeFileSync(mdPath, markdownContent, 'utf-8')
-  return mdPath
+  return null
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
