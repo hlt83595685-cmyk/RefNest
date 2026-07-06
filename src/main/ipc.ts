@@ -189,6 +189,25 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('fs:writeFile', (_e, filePath: string, data: number[]) => {
     writeFileSync(filePath, Buffer.from(data))
   })
+  ipcMain.handle('fs:listDir', (_e, dirPath: string) => {
+    const { readdirSync, statSync } = require('fs') as typeof import('fs')
+    const { join: pjoin, extname: pext } = require('path') as typeof import('path')
+    const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'])
+    function collect(dir: string): string[] {
+      const out: string[] = []
+      try {
+        for (const entry of readdirSync(dir)) {
+          const full = pjoin(dir, entry)
+          try {
+            if (statSync(full).isDirectory()) out.push(...collect(full))
+            else if (IMAGE_EXTS.has(pext(entry).toLowerCase())) out.push(full)
+          } catch { /* skip unreadable */ }
+        }
+      } catch { /* dir unreadable */ }
+      return out
+    }
+    return collect(dirPath)
+  })
   ipcMain.handle('pdfjs:workerPath', () => {
     return require.resolve('pdfjs-dist/build/pdf.worker.min.mjs')
   })

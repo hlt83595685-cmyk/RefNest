@@ -5,7 +5,7 @@ import { useItemStore } from '../../stores/itemStore'
 
 export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
   const { t } = useTranslation('common')
-  const { openPdf, openMarkdown } = useItemStore()
+  const { openPdf, openMarkdown, openGallery } = useItemStore()
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -43,20 +43,27 @@ export function AttachmentsTab({ itemId }: { itemId: number }): JSX.Element {
 
   const handleOpen = async (att: Attachment): Promise<void> => {
     const name = att.filename?.toLowerCase() ?? ''
+    const isImgDir = (att as Attachment & { type?: string }).type === 'imagedir'
     const isPdf = att.mime_type === 'application/pdf' || name.endsWith('.pdf')
     const isMd  = att.mime_type === 'text/markdown' || name.endsWith('.md')
 
-    if (isPdf || isMd) {
-      const path = await window.refnest.attachments.getPath(att.id)
-      if (!path) return
-      if (isMd) openMarkdown(path, att.filename ?? 'document.md')
-      else       openPdf(path, att.filename ?? 'document.pdf')
+    const path = await window.refnest.attachments.getPath(att.id)
+    if (!path) return
+
+    if (isImgDir) {
+      openGallery(path, att.filename ?? '图片文件夹')
+    } else if (isMd) {
+      openMarkdown(path, att.filename ?? 'document.md')
+    } else if (isPdf) {
+      openPdf(path, att.filename ?? 'document.pdf')
     } else {
       await window.refnest.attachments.openExternal(att.id)
     }
   }
 
   const getAttIcon = (att: Attachment): { icon: string; bg: string; color: string } => {
+    const isImgDir = (att as Attachment & { type?: string }).type === 'imagedir'
+    if (isImgDir) return { icon: '🖼', bg: 'rgba(255,149,0,0.12)', color: '#ff9500' }
     const isMd = att.mime_type === 'text/markdown' || att.filename?.toLowerCase().endsWith('.md')
     if (isMd) return { icon: 'M↓', bg: 'rgba(52,199,89,0.12)', color: '#34c759' }
     const isPdf = att.mime_type === 'application/pdf' || att.filename?.toLowerCase().endsWith('.pdf')

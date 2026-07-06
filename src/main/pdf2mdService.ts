@@ -1,7 +1,7 @@
 import { join, dirname, basename } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { app, BrowserWindow } from 'electron'
-import { registerAttachment, getAttachmentsByItem } from './db/attachments'
+import { registerAttachment, registerAttachmentDir, getAttachmentsByItem } from './db/attachments'
 import { convertPdfToMarkdownAuto, convertPdfToMarkdownPrecision } from './mineruApi'
 
 // ── Window reference ──────────────────────────────────────────────────────────
@@ -110,23 +110,29 @@ async function runConversion(job: QueueItem): Promise<void> {
     const mode = getPdf2mdMode()
     const token = getPdf2mdApiToken()
 
-    let outPath: string
+    let mdPath: string
     if (mode === 'precision') {
       if (!token) throw new Error('精准解析模式需要填写 API Token（请前往设置 → PDF 转换）')
-      outPath = await convertPdfToMarkdownPrecision(pdfPath, token, (p) => {
+      const result = await convertPdfToMarkdownPrecision(pdfPath, token, (p) => {
         const msg = p.message ?? p.state
         console.log(`[pdf2md:precision]${p.chunk ? ` [${p.chunk}]` : ''} ${msg}`)
         push('running', msg, p.chunk)
       }, outputPath)
+      mdPath = result.mdPath
+      if (result.imagesDir) {
+        const dirName = basename(result.imagesDir)
+        registerAttachmentDir(itemId, result.imagesDir, dirName)
+        console.log(`[pdf2md] Registered images dir: ${result.imagesDir}`)
+      }
     } else {
-      outPath = await convertPdfToMarkdownAuto(pdfPath, (p) => {
+      mdPath = await convertPdfToMarkdownAuto(pdfPath, (p) => {
         const msg = p.message ?? p.state
         console.log(`[pdf2md]${p.chunk ? ` [${p.chunk}]` : ''} ${msg}`)
         push('running', msg, p.chunk)
       }, outputPath)
     }
-    registerAttachment(itemId, outPath)
-    console.log(`[pdf2md] Done: ${outPath}`)
+    registerAttachment(itemId, mdPath)
+    console.log(`[pdf2md] Done: ${mdPath}`)
     push('done', '转换完成')
   } catch (err) {
     const msg = (err as Error).message

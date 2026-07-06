@@ -77,10 +77,23 @@ export function registerAttachment(itemId: number, filePath: string): Attachment
   return db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as Attachment
 }
 
+/**
+ * Register a directory as an imagedir attachment (no file copy — records the dir path).
+ */
+export function registerAttachmentDir(itemId: number, dirPath: string, displayName: string): Attachment {
+  const db = getDb()
+  db.prepare(`
+    INSERT INTO attachments (item_id, type, filename, path, mime_type, size)
+    VALUES (@item_id, @type, @filename, @path, @mime_type, @size)
+  `).run({ item_id: itemId, type: 'imagedir', filename: displayName, path: dirPath, mime_type: null, size: null })
+  const id = (db.prepare('SELECT last_insert_rowid() as id').get() as { id: number }).id
+  return db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as Attachment
+}
+
 export function removeAttachment(id: number): void {
   const db = getDb()
-  const row = db.prepare('SELECT path FROM attachments WHERE id = ?').get(id) as { path: string | null } | undefined
-  if (row?.path) {
+  const row = db.prepare('SELECT path, type FROM attachments WHERE id = ?').get(id) as { path: string | null; type: string } | undefined
+  if (row?.path && row.type !== 'imagedir') {
     try { unlinkSync(row.path) } catch { /* file may already be gone */ }
   }
   db.prepare('DELETE FROM attachments WHERE id = ?').run(id)

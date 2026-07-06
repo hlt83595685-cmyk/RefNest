@@ -6,6 +6,7 @@ import { ItemListPane } from '../item-tree/ItemListPane'
 import { DetailPane } from '../detail-panel/DetailPane'
 import { PdfReaderPane } from '../pdf-viewer/PdfReaderPane'
 import { MarkdownReaderPane } from '../pdf-viewer/MarkdownReaderPane'
+import { ImageGalleryPane } from '../pdf-viewer/ImageGalleryPane'
 import { useItemStore } from '../../stores/itemStore'
 
 export function MainLayout(): JSX.Element {
@@ -43,7 +44,9 @@ export function MainLayout(): JSX.Element {
           {viewerPath
             ? viewerType === 'markdown'
               ? <MarkdownReaderPane />
-              : <PdfReaderPane />
+              : viewerType === 'gallery'
+                ? <ImageGalleryPane />
+                : <PdfReaderPane />
             : <ItemListPane />
           }
         </main>

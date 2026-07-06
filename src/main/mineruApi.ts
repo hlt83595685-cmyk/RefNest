@@ -194,7 +194,7 @@ async function precisionExtractZip(
   zipUrl: string,
   outputDir: string,
   stem: string
-): Promise<string> {
+): Promise<{ mdPath: string; imagesDir: string | null }> {
   // Download zip
   const resp = await fetch(zipUrl)
   if (!resp.ok) throw new Error(`Download zip failed: HTTP ${resp.status}`)
@@ -211,7 +211,17 @@ async function precisionExtractZip(
   // Locate full.md — it may be at the root or inside a subdirectory
   const mdPath = findFile(extractDir, 'full.md')
   if (!mdPath) throw new Error('full.md not found in MinerU zip')
-  return mdPath
+
+  // Find the images directory (typically alongside full.md)
+  const mdDir = dirname(mdPath)
+  const { readdirSync: rd, statSync: st } = require('fs') as typeof import('fs')
+  let imagesDir: string | null = null
+  for (const entry of rd(mdDir)) {
+    const full = join(mdDir, entry)
+    if (st(full).isDirectory()) { imagesDir = full; break }
+  }
+
+  return { mdPath, imagesDir }
 }
 
 function findFile(dir: string, name: string): string | null {
@@ -284,11 +294,9 @@ export async function convertPdfToMarkdownPrecision(
   token: string,
   onProgress?: (p: MinerUProgress) => void,
   outputPath?: string
-): Promise<string> {
+): Promise<{ mdPath: string; imagesDir: string | null }> {
   const outputDir = dirname(outputPath ?? filePath)
-  const stem = basename(outputPath ?? filePath, '.md') === basename(filePath, '.pdf')
-    ? basename(filePath, '.pdf')
-    : basename(outputPath ?? filePath, '.md')
+  const stem = basename(filePath, '.pdf')
 
   const fileName = basename(filePath)
 
@@ -302,10 +310,10 @@ export async function convertPdfToMarkdownPrecision(
   const zipUrl = await precisionPollBatch(batchId, token)
 
   onProgress?.({ state: 'running', message: '下载并解压结果...' })
-  const mdPath = await precisionExtractZip(zipUrl, outputDir, stem)
+  const { mdPath, imagesDir } = await precisionExtractZip(zipUrl, outputDir, stem)
 
   onProgress?.({ state: 'done', message: '精准解析完成' })
-  return mdPath
+  return { mdPath, imagesDir }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

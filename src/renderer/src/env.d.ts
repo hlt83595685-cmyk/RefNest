@@ -74,6 +74,7 @@ interface RefNestAPI {
     readTextFile: (filePath: string) => Promise<string>
     writeFile: (filePath: string, data: number[]) => Promise<void>
     pdfjsWorkerPath: () => Promise<string>
+    listDir: (dirPath: string) => Promise<string[]>
   }
   tools: {
     openExternal: (url: string) => Promise<void>

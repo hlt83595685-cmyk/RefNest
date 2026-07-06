@@ -85,6 +85,7 @@ const refnestAPI = {
     readTextFile: (filePath: string) => ipcRenderer.invoke('fs:readTextFile', filePath) as Promise<string>,
     writeFile: (filePath: string, data: number[]) => ipcRenderer.invoke('fs:writeFile', filePath, data),
     pdfjsWorkerPath: () => ipcRenderer.invoke('pdfjs:workerPath') as Promise<string>,
+    listDir: (dirPath: string) => ipcRenderer.invoke('fs:listDir', dirPath) as Promise<string[]>,
   },
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),

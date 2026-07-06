@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Item } from '../../../shared/types'
 
-type ViewerType = 'pdf' | 'markdown'
+type ViewerType = 'pdf' | 'markdown' | 'gallery'
 
 interface ItemStore {
   items: Item[]
@@ -9,7 +9,7 @@ interface ItemStore {
   activeCollection: string
   searchQuery: string
   yearSort: 'none' | 'desc'
-  // Viewer state (PDF or Markdown)
+  // Viewer state
   viewerPath: string | null
   viewerFilename: string | null
   viewerType: ViewerType
@@ -20,6 +20,7 @@ interface ItemStore {
   toggleYearSort: () => void
   openPdf: (path: string, filename: string) => void
   openMarkdown: (path: string, filename: string) => void
+  openGallery: (dirPath: string, name: string) => void
   closePdf: () => void
 }
 
@@ -63,5 +64,6 @@ export const useItemStore = create<ItemStore>((set) => ({
   toggleYearSort: () => set((s) => ({ yearSort: s.yearSort === 'desc' ? 'none' : 'desc' })),
   openPdf: (path, filename) => set({ viewerPath: path, viewerFilename: filename, viewerType: 'pdf' }),
   openMarkdown: (path, filename) => set({ viewerPath: path, viewerFilename: filename, viewerType: 'markdown' }),
+  openGallery: (dirPath, name) => set({ viewerPath: dirPath, viewerFilename: name, viewerType: 'gallery' }),
   closePdf: () => set({ viewerPath: null, viewerFilename: null }),
 }))
