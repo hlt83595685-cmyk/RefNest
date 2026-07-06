@@ -226,16 +226,17 @@ async function precisionExtractZip(
 
   if (!markdownContent) throw new Error('full.md not found in MinerU zip')
 
-  // Rewrite all relative image references to absolute forward-slash paths.
-  // The MarkdownViewer will prefix these with refnest-file:/// for Electron rendering.
+  // Rewrite relative image references to stem_images/basename — a path that is:
+  //  - valid for external markdown viewers (relative to the .md file)
+  //  - resolvable by MarkdownViewer via join(mdDir, relPath) → IPC readFile
+  const imagesRelDir = `${stem}_images`
   markdownContent = markdownContent.replace(
-    /!\[([^\]]*)\]\((?!https?:\/\/)(?!refnest-file:\/\/)([^)]+)\)/g,
+    /!\[([^\]]*)\]\((?!https?:\/\/)([^)]+)\)/g,
     (match, alt, src) => {
       const imgBasename = basename(src)
       const candidate = join(imagesDir, imgBasename)
       if (existsSync(candidate)) {
-        // Write absolute forward-slash path so viewer can build refnest-file:// URL
-        return `![${alt}](${candidate.replace(/\\/g, '/')})`
+        return `![${alt}](${imagesRelDir}/${imgBasename})`
       }
       return match
     }
