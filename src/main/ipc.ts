@@ -1,4 +1,4 @@
-import { IpcMain, dialog, shell, BrowserWindow } from 'electron'
+import { IpcMain, dialog, shell, BrowserWindow, app } from 'electron'
 import { readFileSync, writeFileSync } from 'fs'
 import { convertPdfToMarkdown } from './mineruApi'
 import { saveSettings, isPdf2mdEnabled, getStoragePath, saveStoragePath, manualConvertPdfToMd, getPdf2mdMode, getPdf2mdApiToken } from './pdf2mdService'
@@ -209,7 +209,11 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return collect(dirPath)
   })
   ipcMain.handle('pdfjs:workerPath', () => {
-    return require.resolve('pdfjs-dist/build/pdf.worker.min.mjs')
+    // Anchor resolution to this app's own node_modules so sibling projects
+    // with their own pdfjs-dist installs are never picked up by mistake.
+    return require.resolve('pdfjs-dist/build/pdf.worker.min.mjs', {
+      paths: [app.getAppPath()],
+    })
   })
 
   // PDF to Markdown via MinerU API (caller provides paths)
